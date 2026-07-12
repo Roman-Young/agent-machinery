@@ -1,0 +1,15 @@
+# The real config — secrets and personal identifiers. Never commit.
+.env
+
+# Runtime artifacts
+*.log
+.agent-logs/
+backups/
+
+# OS noise
+.DS_Store
+
+# Belt and suspenders: catch any env variant, but keep the template
+*.env
+!example.env
+secrets*

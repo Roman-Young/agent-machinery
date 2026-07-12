@@ -1,0 +1,10 @@
+# ~/.config/systemd/user/agent-morning-brief.timer
+[Unit]
+Description=Run morning brief daily
+
+[Timer]
+OnCalendar=*-*-* 07:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

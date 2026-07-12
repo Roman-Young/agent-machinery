@@ -1,0 +1,8 @@
+# ~/.config/systemd/user/agent-morning-brief.service
+[Unit]
+Description=Personal agent: morning brief
+
+[Service]
+Type=oneshot
+# Adjust path to where this repo is checked out:
+ExecStart=%h/agent-machinery/scripts/morning-brief.sh

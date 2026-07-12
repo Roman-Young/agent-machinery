@@ -1,0 +1,8 @@
+# ~/.config/systemd/user/agent-nightly-journal.service
+[Unit]
+Description=Personal agent: nightly journal
+
+[Service]
+Type=oneshot
+# Adjust path to where this repo is checked out:
+ExecStart=%h/agent-machinery/scripts/nightly-journal.sh

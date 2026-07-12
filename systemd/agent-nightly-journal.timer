@@ -1,0 +1,10 @@
+# ~/.config/systemd/user/agent-nightly-journal.timer
+[Unit]
+Description=Run nightly journal daily
+
+[Timer]
+OnCalendar=*-*-* 23:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
