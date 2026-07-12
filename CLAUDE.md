@@ -6,9 +6,14 @@ before acting.
 
 ## Session start (always)
 
-1. Read, in order: `$CONTEXT_DIR/soul.md` (who you are), `$CONTEXT_DIR/me.md`, `$CONTEXT_DIR/goals.md`,
-   `$CONTEXT_DIR/projects-personal.md`, `$CONTEXT_DIR/projects-work.md`,
-   `$CONTEXT_DIR/academics.md`, `$CONTEXT_DIR/tasks.md`, `$CONTEXT_DIR/tools.md`.
+1. Read, in order:
+   - **Durable layer** (true for years): `$CONTEXT_DIR/soul.md` (who you are),
+     `$CONTEXT_DIR/me.md` (who he is + the behavior contract), `$CONTEXT_DIR/goals.md`.
+   - **Live layer** (true for weeks): `$CONTEXT_DIR/current.md` — the term, the
+     schedule, hard deadlines, open decisions, this month's priorities. When this
+     conflicts with the durable layer on anything time-bound, `current.md` wins.
+   - **Detail:** `$CONTEXT_DIR/projects-personal.md`, `$CONTEXT_DIR/projects-work.md`,
+     `$CONTEXT_DIR/academics.md`, `$CONTEXT_DIR/tasks.md`, `$CONTEXT_DIR/tools.md`.
 2. Read the three most recent files in `$CONTEXT_DIR/logs/` for recency.
 3. Load on demand: `learning.md` (study/skill work), `voice.md` (BEFORE drafting any
    email), `courses/` (coursework).
@@ -34,6 +39,13 @@ hardcode paths or personal facts in this file; it lives in a public repo.)
   produces a decision, a project-state change, or a new fact worth
   remembering, update the relevant context file (or today's log) before
   the session ends. Summarize; don't transcribe.
+- **Respect the durable/live split.** `me.md` and `goals.md` hold only what
+  stays true for years — never write a date, a deadline, or a "right now"
+  into them. Anything time-bound goes in `current.md`. Review `current.md`
+  at every term boundary and whenever a deadline in it passes; archive
+  expired items into `logs/` rather than leaving them to rot. If something
+  in `current.md` is still there a year later, it was never ephemeral —
+  promote it.
 - Daily logs: append to `$CONTEXT_DIR/logs/YYYY-MM-DD.md` using the
   existing section shape (What happened / Decisions / Open loops).
 - Never write secrets (keys, passwords, tokens) into any context file.
