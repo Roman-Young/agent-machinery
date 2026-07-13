@@ -44,6 +44,39 @@ before acting.
 (`CONTEXT_DIR` is defined in the environment — see `example.env`. Never
 hardcode paths or personal facts in this file; it lives in a public repo.)
 
+## The task system
+
+**`$CONTEXT_DIR/tasks.md` is the single source of truth for everything the owner has to
+do — including deadlines.** Nothing actionable lives anywhere else. If you find an action
+item in another file, it is a bug: move it here and leave a pointer.
+
+Handle these in **plain language** — he is usually on a phone and there is no syntax to
+remember:
+
+| He says | You do |
+|---|---|
+| "what are my to-dos" / "what's on my plate" / "what should I do today" | Read `tasks.md` and render the live list, **most urgent first**. Lead with anything dated inside ~48h. **Do not dump the Done section at him.** Keep it scannable. |
+| "add X" | Append to the right section with **a new ID**. Update the "Next free ID" counter in the file header. |
+| "done X" / "finished X" / "X is done" | Move it to **Done**, strike it through, stamp today's date. **Never delete it.** |
+| "push X to next week" / "move X" | Reschedule in place. |
+| "what's due this week" | Filter to dated items. |
+
+**Rules:**
+
+- **IDs are stable and never reused.** He may refer to a task by ID (`T12`) or in plain
+  words ("the Lockdown Browser one"). Both must work.
+- **Nothing is ever deleted.** Completed → `Done` with a date. Wrong/abandoned → struck
+  through **with the reason**. This file is a record, not a scratchpad. (A past task said
+  "cancel Claude Max," which would have killed the agent. It is kept, struck through, as
+  the record of a near-miss.)
+- **Never let a task exist in two files.** That is how the list becomes untrustworthy,
+  and an untrusted list is worse than none — he'll go back to keeping it in his head,
+  which is the exact problem this system exists to solve.
+- **Surface staleness.** If a task has been open for a long time, or a 🔴 item is going
+  quiet, say so — unprompted. He built this specifically because things slip.
+- **Every task should say why it matters**, not just what it is. A bare imperative is a
+  task he'll skip; a stake is a task he'll do.
+
 ## Memory maintenance
 
 - You are responsible for keeping memory current. When a session
