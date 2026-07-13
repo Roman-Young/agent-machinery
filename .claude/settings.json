@@ -1,0 +1,123 @@
+{
+  "$comment": [
+    "Permission policy for the personal agent. Path-free by design: this repo is",
+    "public, so anything containing a personal path lives in the user-level",
+    "~/.claude/settings.json instead (see docs/permissions.md).",
+    "",
+    "Precedence is deny > ask > allow.",
+    "",
+    "LIMITATION, stated plainly: Bash rules are PREFIX matches, not a sandbox. They",
+    "stop the obvious and the accidental; they are not a security boundary against a",
+    "determined adversary. The real guarantees are (1) destructive tools are denied,",
+    "(2) secrets are denied at the Read layer, (3) anything outward-facing asks first."
+  ],
+
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git branch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git switch:*)",
+      "Bash(git remote:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git stash:*)",
+      "Bash(git config:*)",
+
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(find:*)",
+      "Bash(rg:*)",
+      "Bash(grep:*)",
+      "Bash(sed:*)",
+      "Bash(awk:*)",
+      "Bash(which:*)",
+      "Bash(command -v:*)",
+      "Bash(mkdir -p:*)",
+      "Bash(touch:*)",
+      "Bash(date:*)",
+      "Bash(echo:*)",
+      "Bash(diff:*)",
+      "Bash(sort:*)",
+      "Bash(uniq:*)",
+      "Bash(jq:*)",
+
+      "mcp__claude_ai_Gmail__search_threads",
+      "mcp__claude_ai_Gmail__get_thread",
+      "mcp__claude_ai_Gmail__get_message",
+      "mcp__claude_ai_Gmail__list_labels",
+      "mcp__claude_ai_Gmail__list_drafts",
+
+      "mcp__claude_ai_Google_Calendar__list_events",
+      "mcp__claude_ai_Google_Calendar__get_event",
+      "mcp__claude_ai_Google_Calendar__search_events",
+      "mcp__claude_ai_Google_Calendar__list_calendars",
+
+      "mcp__claude_ai_Granola__list_meetings",
+      "mcp__claude_ai_Granola__get_meetings",
+      "mcp__claude_ai_Granola__query_granola_meetings",
+      "mcp__claude_ai_Granola__get_meeting_transcript",
+      "mcp__claude_ai_Granola__list_meeting_folders",
+
+      "mcp__claude_ai_Google_Drive__search_files",
+      "mcp__claude_ai_Google_Drive__read_file_content",
+      "mcp__claude_ai_Google_Drive__get_file_metadata",
+      "mcp__claude_ai_Google_Drive__list_recent_files",
+
+      "mcp__claude_ai_PubMed__search_articles",
+      "mcp__claude_ai_PubMed__get_article_metadata",
+      "mcp__claude_ai_PubMed__get_full_text_article",
+
+      "WebSearch",
+      "WebFetch"
+    ],
+
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(sudo:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(ssh:*)",
+      "Bash(scp:*)",
+      "Bash(apt:*)",
+      "Bash(apt-get:*)",
+      "mcp__claude_ai_Gmail__create_draft"
+    ],
+
+    "deny": [
+      "Bash(rm:*)",
+      "Bash(rmdir:*)",
+      "Bash(shred:*)",
+      "Bash(dd:*)",
+      "Bash(mkfs:*)",
+      "Bash(truncate:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git filter-branch:*)",
+      "Bash(chmod -R 777:*)",
+
+      "Read(**/.ssh/**)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/id_rsa*)",
+      "Read(**/id_ed25519*)",
+      "Read(**/credentials*)",
+      "Read(**/*.p12)",
+
+      "mcp__claude_ai_Google_Calendar__delete_event",
+      "mcp__claude_ai_Gmail__apply_sensitive_message_label",
+      "mcp__claude_ai_Gmail__apply_sensitive_thread_label"
+    ]
+  }
+}

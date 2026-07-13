@@ -8,15 +8,26 @@ before acting.
 
 1. Read, in order:
    - **Durable layer** (true for years): `$CONTEXT_DIR/soul.md` (who you are),
-     `$CONTEXT_DIR/me.md` (who he is + the behavior contract), `$CONTEXT_DIR/goals.md`.
+     `$CONTEXT_DIR/me.md` (who he is + the behavior contract), `$CONTEXT_DIR/goals.md`,
+     `$CONTEXT_DIR/insights.md` (**what you have learned by watching him** — the
+     accumulated-learning layer; `me.md` is his self-report, this is your evidence).
    - **Live layer** (true for weeks): `$CONTEXT_DIR/current.md` — the term, the
      schedule, hard deadlines, open decisions, this month's priorities. When this
      conflicts with the durable layer on anything time-bound, `current.md` wins.
    - **Detail:** `$CONTEXT_DIR/projects-personal.md`, `$CONTEXT_DIR/projects-work.md`,
-     `$CONTEXT_DIR/academics.md`, `$CONTEXT_DIR/tasks.md`, `$CONTEXT_DIR/tools.md`.
+     `$CONTEXT_DIR/academics.md`, `$CONTEXT_DIR/tasks.md`, `$CONTEXT_DIR/tools.md`,
+     `$CONTEXT_DIR/open-questions.md` (**what you don't know and must ask** — never
+     invent an answer to something on this list; surface the 🔴 items proactively).
 2. Read the three most recent files in `$CONTEXT_DIR/logs/` for recency.
-3. Load on demand: `learning.md` (study/skill work), `voice.md` (BEFORE drafting any
-   email), `courses/` (coursework).
+3. **Load on demand — never at session start** (this is what keeps startup cheap):
+   - `learning.md` — study/skill work.
+   - `voice.md` — BEFORE drafting any email. No exceptions.
+   - `courses/<term>/<course>/` — coursework. The active term is named in `current.md`.
+   - `reference/` — deep briefings on a project. **Read the relevant one before doing
+     substantive work on that project.** The summary in `projects-*.md` is not enough
+     to work from; it is enough to know *that you need to go read the briefing*.
+   - `local-only/` — same, for sensitive material. Gitignored; never copy content out.
+   - `archive/` — only when researching something that already ended.
 4. Only then address the task.
 
 ## Roman-specific rules
@@ -46,11 +57,46 @@ hardcode paths or personal facts in this file; it lives in a public repo.)
   expired items into `logs/` rather than leaving them to rot. If something
   in `current.md` is still there a year later, it was never ephemeral —
   promote it.
+- **Never name an ephemeral thing in a durable file.** A course, a deadline, a
+  term — these churn. Durable files hold the *rule*; the ephemeral layer holds the
+  *instance*. (E.g. the class-stakes rule lives in `me.md`; which class is
+  high-stakes lives in that course's folder.) This is the single most common way
+  the memory rots.
 - Daily logs: append to `$CONTEXT_DIR/logs/YYYY-MM-DD.md` using the
   existing section shape (What happened / Decisions / Open loops).
 - Never write secrets (keys, passwords, tokens) into any context file.
 - Content marked for `local-only/` stays in `local-only/` — never copy
   or summarize it into tracked files.
+
+## The learning loop (this is the point of the whole system)
+
+Logs are only read **three files deep**. Anything learned and left in an older log
+is functionally forgotten. So a lesson has to be *promoted* to survive.
+
+**The lifecycle of a piece of knowledge:**
+
+```
+observed in a session
+   → written to logs/YYYY-MM-DD.md          (always — the raw record)
+   → if it RECURS, promote to insights.md   (the durable-learning layer, read every session)
+   → if it's a reusable artifact, to reference/   (deep docs, loaded on demand)
+   → when the thing it came from ENDS, distill to archive/ and promote what's durable
+```
+
+**Rules:**
+
+- **One occurrence is a log entry. A recurrence is an insight.** Don't inflate
+  `insights.md` with one-offs — it is only useful while it's short enough to act on.
+- **Every insight cites its evidence** (the dates it was observed). An insight with
+  no evidence is a guess, and it will be applied silently.
+- **Insights are falsifiable.** If the owner disproves one, delete it. A wrong
+  insight is worse than no insight.
+- **When something ends — a course, a project, a term — distill before deleting.**
+  Write the archive file *while the memory is fresh*, and explicitly answer: did
+  anything here get promoted, and if not, why not?
+- **Never delete something you don't understand — flag it.** Deleting is the one
+  move the next session cannot undo. (This rule exists because a past session
+  deleted a garbled action item it had misread, destroying a real instruction.)
 
 ## Hard rules for actions
 
