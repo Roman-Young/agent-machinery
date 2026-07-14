@@ -38,6 +38,12 @@ MAILTO=""
 # emails or IPs.
 15 2 * * *     /home/roman/agent/agent-machinery/scripts/backup-context.sh >> /home/roman/.agent-logs/backup.log 2>&1
 
+# ── OUTBOX ───────────────────────────────────────────────────────────────────
+# Mac-Cairn (in VS Code) cannot write memory — one-writer rule. It leaves REQUESTS in an
+# outbox instead, and this applies them. Without it, a task added while coding goes NOWHERE.
+# Hourly, but it exits instantly and spends ZERO tokens when the outbox is empty.
+7 * * * *      /home/roman/agent/agent-machinery/scripts/process-outbox.sh >> /home/roman/.agent-logs/outbox.log 2>&1
+
 # ── WEEKLY SELF-AUDIT ────────────────────────────────────────────────────────
 # Catches permission drift, a dead scheduler, a broken connector, a stale backup —
 # BEFORE they cost a silent morning. Sunday 9am.
