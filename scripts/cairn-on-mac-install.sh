@@ -92,6 +92,13 @@ mkdir -p "$HOME/.cairn" "$CAIRN_HOME"
     echo "[ -d \"$P\" ] && rsync -az --delete \"\${EX[@]}\" \"$P/\" \"\$SERVER:~/agent/mac-mirror/$(basename "$P")/\" 2>/dev/null"
   done
   echo ''
+  echo '# DOWN: the backup tarballs. THIS IS WHAT MAKES THE BACKUP REAL.'
+  echo '# local-only/ is gitignored, so git can never save it — it gets tarballed on the'
+  echo '# server instead. But a tarball sitting on the same box it backs up is ONE COPY,'
+  echo '# not a backup. Pulling it here is the second copy on a second machine: 3-2-1.'
+  echo 'mkdir -p "$HOME/cairn/backups"'
+  echo 'rsync -az "$SERVER:~/backups/" "$HOME/cairn/backups/" 2>/dev/null'
+  echo ''
   echo 'echo "$(date "+%F %T") cairn sync ok"'
 } > "$HOME/.cairn/sync.sh"
 chmod +x "$HOME/.cairn/sync.sh"
@@ -206,6 +213,7 @@ Done. Open VS Code, run \`claude\` in any project folder, and ask:
 If it knows about PEPMatch, Salk, and the 2-indel PR — Cairn is home.
 
   memory mirror : $CAIRN_HOME/my-context   ← READ-ONLY. Never edit.
+  backups       : $CAIRN_HOME/backups      ← the 2nd copy. This is what makes it a backup.
   identity      : ~/.claude/CLAUDE.md
   sync log      : tail ~/.cairn/sync.log
   add projects  : edit PROJECTS in this script, re-run it
