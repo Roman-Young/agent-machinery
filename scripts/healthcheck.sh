@@ -89,8 +89,14 @@ if [[ -n "$BLOG" ]]; then
     LOCALH=$(TZ="${LOCAL_TZ:-America/Los_Angeles}" date -d "$LASTRUN" +%H:%M 2>/dev/null)
     if [[ "$LOCALH" == "07:3"* ]]; then
       ok "brief last ran at $LOCALH local — the RIGHT hour (verified from the log, not the config)"
+    # Distinguish "BROKEN NOW" from "WAS broken, fixed, awaiting proof". A run that
+    # predates the fix is EXPECTED to be wrong — flagging it red forever would train
+    # Roman to ignore a red healthcheck, and an ignored check protects nothing. (Same
+    # principle as pii-scan: a scanner that cries wolf gets disabled.)
+    elif [[ $(date -d "$LASTRUN" +%s) -lt $(stat -c %Y "$SCRIPT_DIR/run-local.sh" 2>/dev/null || echo 0) ]]; then
+      warn "brief last ran at $LOCALH local (WRONG) — but that run PREDATES the timezone fix. The schedule is corrected; tomorrow's 07:30 run is the real proof."
     else
-      bad "🔴 brief last ran at $LOCALH LOCAL — WRONG HOUR. It should be ~07:30."
+      bad "🔴 brief last ran at $LOCALH LOCAL — WRONG HOUR, and this run is AFTER the fix. The schedule is still broken."
     fi
   fi
 else
