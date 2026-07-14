@@ -5,4 +5,4 @@ Description=Personal agent: nightly journal
 [Service]
 Type=oneshot
 # Adjust path to where this repo is checked out:
-ExecStart=%h/agent-machinery/scripts/nightly-journal.sh
+ExecStart=%h/agent/agent-machinery/scripts/nightly-journal.sh

@@ -1,10 +1,16 @@
 # ~/.config/systemd/user/agent-morning-brief.timer
 [Unit]
-Description=Run morning brief daily
+Description=Cairn morning brief — email triage, today's tasks, deadlines
 
 [Timer]
-OnCalendar=*-*-* 07:30:00
+# ⚠️ THE TIMEZONE IS LOAD-BEARING. The server runs UTC (Etc/UTC); Roman lives in
+# Pacific. Without the explicit zone this fires at 07:30 UTC = 00:30 PDT — the brief
+# would land at half past midnight, every night. Naming the zone also makes systemd
+# handle the PDT/PST switch, so it does not silently drift by an hour twice a year.
+# (Requires systemd >= 252; the server has 259.)
+OnCalendar=*-*-* 07:30:00 America/Los_Angeles
 Persistent=true
+AccuracySec=1min
 
 [Install]
 WantedBy=timers.target
