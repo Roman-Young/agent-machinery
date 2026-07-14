@@ -142,6 +142,12 @@ mkdir -p "$HOME/.cairn" "$CAIRN_HOME"
     echo "[ -d \"$P\" ] && rsync -az --delete \"\${EX[@]}\" \"$P/\" \"\$SERVER:~/agent/mac-mirror/$(basename "$P")/\" 2>/dev/null"
   done
   echo ''
+  echo '# UP: the OUTBOX. Mac-Cairn cannot write memory (read-only mirror, one-writer rule),'
+  echo '# so it leaves REQUESTS here instead. The server applies them. Without this, a task'
+  echo '# you add while coding in VS Code would go NOWHERE.'
+  echo 'mkdir -p "$HOME/cairn/outbox"'
+  echo 'rsync -az "$HOME/cairn/outbox/" "$SERVER:~/mac-outbox/" 2>/dev/null'
+  echo ''
   echo '# DOWN: the backup tarballs. THIS IS WHAT MAKES THE BACKUP REAL.'
   echo '# local-only/ is gitignored, so git can never save it — it gets tarballed on the'
   echo '# server instead. But a tarball sitting on the same box it backs up is ONE COPY,'
@@ -197,10 +203,39 @@ which kills the system.
 
 **The server owns memory. This Mac owns code.**
 
-If something worth remembering happens — a decision, a lesson, a changed plan — **say so
-explicitly, clearly labelled, in your final message.** This transcript is shipped to the
-server, and the nightly journal reads it and writes it into the log. The loop closes; it
-just closes through the server, on purpose.
+### How to remember things anyway — THE OUTBOX
+
+You cannot write memory. But you can **request** a change, and the server will apply it.
+
+**When Roman says "add a task", "remind me to X", "I finished Y", or tells you something
+worth remembering — write a request file:**
+
+```
+~/cairn/outbox/<YYYY-MM-DD-HHMMSS>-<short-slug>.md
+```
+
+Plain English inside. For example:
+
+```markdown
+ADD TASK: Email Danish about the IEL panel before Friday.
+Why it matters: he's blocked on the staining schedule.
+```
+```markdown
+DONE: T10 — finished the Seurat QC vignette.
+```
+
+**Then TELL HIM you've queued it**, e.g. *"Queued that for your task list — it'll land
+within the hour."* The server picks it up, applies it to `tasks.md` with a proper ID, and
+pushes you a confirmation.
+
+**One file per request. Never edit or delete an existing one** — they are immutable, and a
+ledger on the server tracks what's been applied, so nothing double-applies and nothing gets
+lost.
+
+If something is worth remembering but isn't a task — a decision, a lesson, a changed plan —
+**also say it explicitly in your final message.** The transcript ships to the server and the
+nightly journal reads it into the log. The loop closes; it just closes through the server,
+on purpose, so there is exactly one writer.
 
 ## The rule that matters most here
 
