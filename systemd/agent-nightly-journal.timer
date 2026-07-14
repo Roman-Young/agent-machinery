@@ -1,10 +1,17 @@
 # ~/.config/systemd/user/agent-nightly-journal.timer
 [Unit]
-Description=Run nightly journal daily
+Description=Cairn nightly journal — distill today's sessions into logs/
 
 [Timer]
-OnCalendar=*-*-* 23:00:00
+# 01:45 Pacific, NOT 23:00 UTC (= 16:00 PDT, which would have written the day's log
+# in the middle of the afternoon, before the day happened).
+#
+# Roman's deep-work block runs ~10pm-1am. Journaling at 01:45 Pacific means the log is
+# written AFTER that block ends, so the day's real work actually lands in it. A journal
+# that runs at 11pm would systematically miss his three most productive hours.
+OnCalendar=*-*-* 01:45:00 America/Los_Angeles
 Persistent=true
+AccuracySec=5min
 
 [Install]
 WantedBy=timers.target

@@ -5,4 +5,4 @@ Description=Personal agent: morning brief
 [Service]
 Type=oneshot
 # Adjust path to where this repo is checked out:
-ExecStart=%h/agent-machinery/scripts/morning-brief.sh
+ExecStart=%h/agent/agent-machinery/scripts/morning-brief.sh
