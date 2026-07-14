@@ -1,233 +1,124 @@
-# Integrations plan — Canvas and multi-account Gmail
+# Integrations — the two hard problems, and what we learned
 
-Written 2026-07-13. Companion to `canvas-access.md` (which has the Canvas research).
+Generic guidance. **Personal specifics (actual addresses, actual filter strings) live in the
+private context repo, never here** — this repo is public.
 
 ---
 
-## ⚠️ Read this first: the headless problem
+## ⚠️ Problem 1: the headless connector trap
 
-**This affects both integrations and it is the biggest open risk in the whole system.**
+**This is the most dangerous failure mode in the whole system, and it is silent.**
 
-The Gmail, Google Calendar, Drive, and Granola connectors are **claude.ai connectors** —
-they were authorized interactively, through an OAuth flow in a browser, tied to the
-claude.ai account.
+Interactive connectors (Gmail, Calendar, Drive — anything OAuth'd through a browser) *do*
+work in a headless `claude -p` run. **But the permission gate does not.**
 
-The **morning brief is a headless run** (`claude -p`, fired by a systemd timer, no
-human, no browser). **Interactively-authenticated connectors may not be available in a
-headless run.** If they aren't, then the morning brief — whose entire job is "triage
-email, surface deadlines" — will fire, find no Gmail and no Calendar, and either fail
-or, much worse, produce a cheerful brief that silently omits everything that matters.
+In a non-interactive run, a tool that isn't on the allowlist is **denied with nobody to
+ask** — and the model then reports **"0 threads found."** Not *"I was blocked."* Zero
+threads. It looks exactly like an empty inbox.
 
-**This has not been tested, because the morning brief doesn't exist yet.** It must be
-tested *before* the brief is trusted, not after.
+So a morning brief can fire, silently see no email at all, and hand you a cheerful summary
+that omits everything that matters. **That is worse than no brief, because you would trust
+it and stop checking yourself.**
 
-**The test** (do this before building the brief):
+### The two things that fix it
+
+**1. An explicit per-job allowlist.** Each job passes its own `--allowedTools`. Never rely
+on ambient config.
 
 ```bash
-cd /home/roman/agent
-claude -p "List the names of every MCP tool you can currently call. Then try to \
-search my Gmail for messages from the last 3 days and report how many you found. \
-If you cannot reach Gmail, say so explicitly."
+export AGENT_ALLOWED_TOOLS="Read,Glob,Grep,\
+mcp__<provider>_Gmail__search_threads,\
+mcp__<provider>_Google_Calendar__list_events"
 ```
 
-Run it from a plain non-interactive shell — no TTY, the way the timer will.
+**2. A coverage assertion the SCRIPT checks — not the model.** Make the job declare what it
+actually reached, then verify it:
 
-- **If it can reach Gmail** → claude.ai connectors survive headless. Proceed; the
-  simple options below are fine.
-- **If it cannot** → the connectors are interactive-only, and every automation that
-  needs email or calendar must use **server-side MCP** (Option C below). This is the
-  fork in the road for the whole automation layer.
+```
+Line 1 MUST be:  SOURCES: gmail=ok calendar=ok
+Write FAIL if a call did not genuinely return data. Never write 'ok' to be agreeable.
+```
 
-Either way, **fail loudly**: the brief script must check that it actually got Gmail and
-Calendar, and push an ntfy alert if it didn't. A brief that silently omits your inbox is
-worse than no brief, because you'll trust it. (Same failure family as
-`insights.md` #6 — verify the actual capability, not a proxy for it.)
+```bash
+grep -qi 'gmail=ok' <<<"$OUT" || { notify "⚠️ BRIEF DEGRADED"; exit 1; }
+```
 
----
-
-## 1. Canvas
-
-**Bottom line: already solved, not yet done. ~5 minutes.** UCSD blocks the Canvas MCP
-*and* blocks students from minting API tokens — neither matters, because the iCal feed
-needs no token and can't be blocked.
-
-### The path (dates)
-
-1. Canvas → **Calendar** → sidebar → **Calendar Feed** → copy the `.ics` URL.
-   **Treat this URL as a secret** — it's an unauthenticated link to your whole schedule.
-2. Google Calendar → **Other calendars → + → From URL** → paste it.
-3. Done. Cairn reads Canvas deadlines through the **Google Calendar connector it already
-   has.** No new auth, no scraping, no browser automation.
-4. Optionally add to `.env` for scripts: `CANVAS_ICS_URL="https://canvas.ucsd.edu/feeds/calendars/user_....ics"`
-
-Auto-updates. Covers ~366 days / up to 1000 items.
-
-### What the feed does NOT give you, and the fix
-
-| Gap | Fix |
-|---|---|
-| **Student To-Do items** are excluded from the feed. | Nothing automatic. Minor. |
-| **Syllabus text, course pages, assignment descriptions, rubrics, lecture slides.** The feed carries *dates*, not *content*. | The ~5-min-per-quarter tax: drop each syllabus into `courses/<term>/<course>/syllabus.md` with its stakes line. Everything else (practice questions, readings) goes in via **Google Drive**, which is the file-ingestion channel. |
-| **Grades.** | Not available. Ask Roman when it matters. |
-
-**This is the honest ceiling of the Canvas integration: Cairn will know every *deadline*
-automatically, and will know *content* only for what gets dropped in.** That's a good
-trade — the deadlines are the part that slips, and they're the part that's automatable.
-
-### Fallback (only if the feed dies)
-Headless browser automation (Playwright) logging in as Roman. Fragile — breaks on HTML
-changes, must survive SSO/2FA. Not needed. Don't build it speculatively.
+**The model asserting success is not evidence. The script checking the assertion is.**
 
 ---
 
-## 2. The five inboxes (updated 2026-07-13 — this replaces the earlier two-account plan)
+## ⚠️ Problem 2: multiple inboxes, and the one you must not touch
 
-**Roman has five email accounts. Cairn reads one.**
+Most people have several: personal, school, and one or more **work/institutional** accounts.
+The agent can typically read *one*.
 
-| # | Address | What | Cairn sees it | Forward it in? |
-|---|---|---|---|---|
-| 1 | `romanyoung9981@gmail.com` | Primary personal | ✅ **the connected one** | — (destination) |
-| 2 | `romankryoung@gmail.com` | Second personal | ❌ | ✅ **yes — trivial, do it** |
-| 3 | `r5young@ucsd.edu` | School | ❌ | ✅ **yes — highest value** |
-| 4 | `ryoung@lji.org` | **Work — LJI** | ❌ | 🛑 **STOP. Policy check first.** |
-| 5 | `ryoung@salk.edu` | **Work — Salk** (Outlook/Exchange) | ❌ | 🛑 **STOP. Policy check first.** |
+### The honesty rule (non-negotiable)
 
-**The uncomfortable fact:** the senders Roman misses most — **Dan, Danish, Ivy, Eduard** —
-almost certainly write to inboxes **4 and 5**, which are exactly the two Cairn must not
-naively slurp. The easy 80% of this integration does not cover the mail that matters most.
+**Until every inbox is covered, the agent must never say "I triaged your inbox" or "nothing
+important came in." It must name WHICH inbox it read.**
 
-### 🛑 Why the work inboxes are not a forwarding problem
+Overstating coverage is the most damaging thing an assistant like this can do: the owner
+stops checking the inboxes it can't see, and those are usually the ones that matter.
+**Partial coverage stated honestly is useful. Partial coverage stated as total is worse than
+nothing.**
 
-Do **not** set up auto-forwarding from `lji.org` or `salk.edu` until Roman has checked
-their acceptable-use policies. Three separate reasons, any one of which is disqualifying:
+### Personal + school inboxes: forward them in
 
-1. **It may simply be against policy.** Research institutions commonly prohibit
-   auto-forwarding institutional mail to personal accounts. Salk and LJI both handle
-   sensitive research; an IT policy violation is a real professional risk, and "my AI
-   agent needed to read it" is not a defense anyone will accept.
-2. **It would route unpublished research into a personal Gmail.** The PEPMatch manuscript,
-   maintainer review threads, unreviewed Salk data. Roman already has a standing rule to
-   keep unpublished method details out of anything public-facing — this is the same rule,
-   and forwarding would quietly break it.
-3. **Blast radius.** Cairn reads untrusted input (email, web pages) while holding shell
-   access on a server. Piping his employers' mail through that is a materially bigger
-   security surface than piping his student mail through it.
+Forward into the one account the agent already reads, and **label on arrival** so it can
+triage by source. Zero new auth, zero new attack surface.
 
-**What to do instead — in order:**
+**But do not blanket auto-archive them** — see below.
 
-- **Ask.** Salk IT and LJI IT: *"is auto-forwarding to a personal address permitted?"*
-  One email each. The answer decides everything.
-- **If forwarding is prohibited** (assume it is until told otherwise): leave the work
-  inboxes out of Cairn. Roman forwards *individual* important threads by hand when he
-  wants help with one. Lower coverage, zero risk, no policy exposure. **This is a fine
-  outcome** — it is not a failure of the system.
-- **If it's permitted**, still don't forward the whole inbox. Forward **only from named
-  senders** (Dan, Danish, Ivy, Eduard, Deepshika) via a server-side rule. Narrow beats
-  broad. Never forward anything with attachments containing unpublished data.
+### 🛑 Institutional / work inboxes: STOP. Ask first.
 
-**Salk is Outlook/Exchange**, so its rules live in Outlook (Settings → Mail → Forwarding,
-or an inbox Rule), not Gmail. Same policy question applies regardless of the mail system.
+**Do not auto-forward work email to a personal account.** Three independent reasons, any one
+of which is disqualifying:
 
-### ✅ Do these two now — they're safe and they cover the failure that already burned him
+1. **It may simply be against policy.** Employers — especially research institutions,
+   hospitals, and anywhere with an IRB — commonly *prohibit* auto-forwarding to personal
+   accounts. *"My AI agent needed to read it"* is not a defense anyone will accept.
+2. **It leaks confidential material.** Unpublished research, review threads, unreleased
+   data — into a personal mailbox, permanently, by a rule nobody remembers setting.
+3. **Blast radius.** The agent reads untrusted input (email, web pages) *while holding shell
+   access*. Piping your employer's mail through that is a materially larger surface than
+   your own student mail.
 
-**#3 UCSD → primary Gmail.** This is the one that matters most and carries no policy
-problem: it's his own student mail, and **the housing bill and the drop deadline both sat
-unread in it.**
+**Send one email to IT and ask. Assume the answer is no until they say otherwise.**
 
-**#2 second personal Gmail → primary Gmail.** Gmail-to-Gmail, trivial, no downside.
-
-Label each on arrival so Cairn can triage by source (`UCSD`, `personal-2`). Then Cairn can
-honestly say *"I've triaged your personal and school mail"* — which is a true statement,
-unlike "I've triaged your inbox."
-
-### The mechanics — forward into the one Cairn already reads
-
-**On mail.ucsd.edu:** ⚙️ → *See all settings* → **Forwarding and POP/IMAP** → *Add a
-forwarding address* → `romanyoung9981@gmail.com` → confirm the code Google sends →
-select **"Forward a copy of incoming mail to…"**, and set it to **keep UCSD's copy in
-the Inbox**.
-
-**On `romankryoung@gmail.com`** (second personal): same thing — ⚙️ → **Forwarding and
-POP/IMAP** → forward to `romanyoung9981@gmail.com`.
-
-**On the primary Gmail** (`romanyoung9981@gmail.com`), label each source so Cairn can
-triage by origin: ⚙️ → *See all settings* → **Filters and Blocked Addresses** → *Create a
-new filter* → **To:** `r5young@ucsd.edu` → *Create filter* → ✅ **Apply the label** → new
-label **`UCSD`** → ✅ **Never send it to Spam**. Repeat with **To:** `romankryoung@gmail.com`
-→ label **`personal-2`**.
-
-Then tell Cairn the label names, and it triages `label:UCSD` explicitly.
-
-- **Why this is right:** zero new auth, zero new attack surface, works headlessly *if
-  the existing connector does*, and gives one inbox to triage instead of five. It
-  directly fixes the failure that actually burned Roman — the housing bill and the drop
-  deadline both sat unread in UCSD mail.
-- **Cost:** Cairn can't *draft from* the UCSD address. Given the standing rule is
-  **draft-only, never send**, and Roman sends manually anyway, this costs approximately
-  nothing — he pastes the draft into whichever account he wants.
-- **If UCSD blocks auto-forwarding** (some universities do): invert it. Personal Gmail →
-  *Accounts and Import* → **Check mail from other accounts** (POP). Pulls UCSD mail in
-  rather than pushing it out. Same end state.
-
-### ⚠️ The honesty rule that comes with all this
-
-Until every inbox is covered, **Cairn must never say "I triaged your inbox" or "nothing
-important came in."** It must name *which* inboxes it read. Right now that is **one of
-five**, and the four it can't see contain **every work email from Dan, Danish, Ivy, and
-Eduard** — i.e. the senders Roman misses most.
-
-Overstating coverage is the single most damaging thing this agent could do here, because
-Roman would stop checking himself, and the mail he'd stop checking is the mail that
-matters. Partial coverage stated honestly is useful. Partial coverage stated as total is
-worse than nothing.
-
-### Option B — Add a second account to the claude.ai Gmail connector
-
-**Status: unverified, and I can't verify it from here.** claude.ai connectors are
-managed in the claude.ai web UI, and this session can't run an OAuth flow. A claude.ai
-Gmail connector authorizes *one* Google account; whether a second can be added alongside
-it (vs. replacing it) is a question for the connector settings page.
-
-**If you want this, go look:** claude.ai → Settings → Connectors → Gmail. If it offers
-"add account," great. If re-authorizing would *replace* the existing account, **stop** —
-that's a downgrade, not an upgrade.
-
-Even if it works, it inherits the headless problem above. **Option A is strictly better
-for the UCSD case.** Option B only earns its place if you need to *act as* a second
-account, which the draft-only rule means you don't.
-
-### Option C — Server-side Gmail MCP with per-account tokens
-
-The real multi-account answer, and **the mandatory one if the headless test above fails.**
-
-Run a Gmail MCP server on the Hetzner box, registered in a project `.mcp.json`, holding
-OAuth refresh tokens for N Google accounts in the gitignored `.env`. Claude Code — both
-interactive and headless — talks to it locally.
-
-- **Pros:** true multi-account. Works headlessly. Independent of claude.ai. Scoped by
-  *you* (grant read-only where possible).
-- **Cons:** real setup work — Google Cloud project, OAuth client, consent screen,
-  per-account refresh tokens, token rotation. This is a build, not a click.
-- **Verdict: do NOT build this speculatively.** It's exactly the kind of infrastructure
-  that has eaten three sessions (`insights.md` #1). Build it **only** when the headless
-  test proves it's necessary, or when you genuinely need to act on a second account.
-  Roman's own anti-goal: *every component earns its place via real pain.*
-
-### Recommendation
-
-1. **Run the headless test.** It's one command and it decides the architecture.
-2. **Do Option A** (forwarding + label) regardless of the result. ~5 min, high value,
-   fixes a failure that has already cost you.
-3. **Only then** consider B or C, and only if the test or a real need forces it.
+If it's prohibited: leave work mail out, and forward individual threads by hand when you
+want help with one. Lower coverage, zero risk — **and that is a perfectly good outcome, not
+a failure of the system.** If it's permitted: still don't forward the whole inbox — forward
+only from named senders.
 
 ---
 
-## Security notes
+## The auto-archive trap
 
-- The Canvas `.ics` URL is an **unauthenticated link to your schedule**. `.env` only,
-  never a tracked file, never a chat transcript.
-- Granting Cairn broader email access widens the blast radius of prompt injection:
-  **it reads untrusted input (email, web pages) while holding shell access.** Keep email
-  **read + draft only**. The `create_draft` permission stays ask-first. Never grant send.
-- Prefer read-only scopes on anything new. (The Hetzner token decision — read-only —
-  is the precedent: *an agent that reads email should not be able to destroy infra.*)
+The obvious "keep my inbox clean" move is: forward everything in, auto-archive it all under
+a label. **Do not do that until something is actually reading the archive.**
+
+If the reason you're doing this is *"I miss important mail"*, then hiding that mail behind a
+label while your brief **doesn't exist yet** makes it strictly worse: now it's invisible
+*and* unread.
+
+**The rule: never hide mail from yourself faster than you build something that reads it.**
+
+The safe design is **two mutually-exclusive filters**, not one:
+- **Filter A (safety net):** from the senders that matter, OR subject matching
+  bills/deadlines/housing/etc → label it, **star it, KEEP IT IN THE INBOX.**
+- **Filter B (quiet bucket):** everything else from that source (the exact negation of A) →
+  label it, **skip the inbox.**
+
+Newsletters vanish. The things that have actually burned you stay visible. When the brief is
+live and trusted, tighten A.
+
+---
+
+## Calendar / LMS feeds
+
+Most learning-management systems expose a personal **iCal feed** that needs no token and
+cannot be blocked by IT — subscribe it into Google Calendar and the agent reads deadlines
+through the calendar connector it already has. It carries **dates, not content**: syllabi and
+assignment text still have to be dropped in by hand, once a term.
+
+Treat the `.ics` URL as a secret: it's an unauthenticated link to your entire schedule.

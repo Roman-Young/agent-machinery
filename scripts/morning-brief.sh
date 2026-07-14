@@ -29,20 +29,26 @@ mcp__claude_ai_Gmail__list_labels,\
 mcp__claude_ai_Google_Calendar__list_events,\
 mcp__claude_ai_Google_Calendar__list_calendars"
 export AGENT_MAX_TURNS=30
+export AGENT_TIMEOUT_SEC=420   # a brief that takes >7min is hung, not thorough
 export PUSH_OUTPUT=0   # we push manually below, AFTER verifying coverage
 
 OUT=$("$SCRIPT_DIR/run-agent.sh" morning-brief \
 "You are Cairn, writing Roman's morning brief. Today is $(date +'%A %B %d, %Y').
 
-READ FIRST: tasks.md (the single source of truth for all actions and deadlines),
-current.md, and today's + yesterday's files in logs/.
+READ FIRST, from the context repo:
+- tasks.md   (the single source of truth for all actions and deadlines)
+- current.md (the term, schedule, open decisions, watch list)
+- me.md      -> the section listing the PEOPLE and EMAIL SENDERS that matter, and which
+               of his inboxes are actually visible to you. Use that list; do not guess.
+- today's and yesterday's files in logs/
 
 THEN CHECK, in this order:
-1. Gmail: search 'newer_than:1d' AND 'label:UCSD newer_than:3d' AND
-   'is:starred newer_than:7d'. Look for: anything from dmarrama@lji.org,
-   dumar@salk.edu, itam@salk.edu, EAnsaldo@scripps.edu, dramanan@ucsd.edu;
-   anything about bills, housing, tuition, deadlines, registration; anything
-   from GitHub about IEDB/PEPMatch.
+1. Gmail. Search 'newer_than:1d', plus 'is:starred newer_than:7d', plus any labels
+   named in me.md. PRIORITISE mail from the senders me.md names as mattering. Also
+   flag: bills, housing, tuition, deadlines, registration, and anything from GitHub
+   about an open PR or issue. IGNORE retail, newsletters, and social notifications.
+   ⚠️ me.md records that only SOME of his inboxes are visible to you. Never claim to
+   have 'checked his email' — say which inbox you actually read.
 2. Google Calendar: today's events.
 
 OUTPUT FORMAT — obey exactly:

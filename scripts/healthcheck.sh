@@ -1,106 +1,191 @@
 #!/usr/bin/env bash
-# healthcheck.sh — prove the agent still works. Run it after ANY change to the machinery.
+# healthcheck.sh — prove the agent still works. Run after ANY change; cron runs it weekly.
 #
-# WHY THIS EXISTS — the actual root cause of everything that broke
-# Every automation bug we hit (2026-07-13/14) had ONE cause: code was WRITTEN and never
-# RUN. The scripts were authored on 07-12 and first executed on 07-14. In those two days
-# they were, silently and simultaneously:
-#   - pointed at a systemd path that did not exist (~/agent-machinery, not ~/agent/...)
-#   - scheduled in UTC, so the "morning" brief would fire at 00:30 Pacific
-#   - having their tool allowlist clobbered by .env
-#   - returning no stdout, so the caller's coverage check tested an empty string
-#   - calling `find`, which the permission policy denies in headless runs
-# Not one of these was visible from reading the code. ALL of them were obvious within
-# sixty seconds of running it.
+# ══════════════════════════════════════════════════════════════════════════════
+# THE FIVE PROPERTIES. This is the framework that came out of the 2026-07-14 audit.
 #
-# This is insights.md #7 as executable code: VERIFY THE ACTUAL OPERATION, NOT A PROXY.
-# A green healthcheck is evidence. "I read it and it looks right" is not.
+# Every failure this system has had came from confusing one of these for another. They are
+# NOT the same question, and passing one tells you nothing about the others:
+#
+#   1. LIVENESS         Does it work RIGHT NOW?
+#                       (The v1 healthcheck tested only this. 20/20 green — while Paseo
+#                        was one reboot from death and the backup had never run.)
+#
+#   2. DURABILITY       Will it STILL be working after a reboot / a crash?
+#                       Paseo: NO. Hand-started, no supervisor. A reboot would have killed
+#                       the phone channel permanently. "It's running" != "it will run."
+#
+#   3. RECOVERABILITY   Does it survive the SERVER DYING?
+#                       25 commits and the whole memory layer sat on one box with a
+#                       2-day-stale GitHub copy, and backup-context.sh had NEVER RUN.
+#                       The system built so nothing gets lost was itself unbacked.
+#
+#   4. BOUNDEDNESS      Can it RUN AWAY? (Dan's warning — he was right.)
+#                       Zero timeouts, zero locks, zero rate caps. An agent that calls
+#                       itself, on a timer, with a card attached, is a machine for burning
+#                       money while you sleep.
+#
+#   5. PUBLISHABILITY   Is it SAFE TO PUSH?
+#                       agent-machinery is PUBLIC and had accumulated the server's IP,
+#                       five personal emails, and FIVE COLLEAGUES' work addresses.
+#                       Caught with one command to spare. Git history is forever.
+#
+# A green healthcheck is evidence. "I read the code and it looks right" is not — every
+# single bug in this system was invisible on read and obvious within 60 seconds of running.
+# ══════════════════════════════════════════════════════════════════════════════
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
+# shellcheck disable=SC1091
+[[ -f "$REPO_DIR/.env" ]] && { set +u; source "$REPO_DIR/.env"; set -u; }
+CTX="${CONTEXT_DIR:-$HOME/agent/my-context}"
 
-PASS=0; FAIL=0
+PASS=0; FAIL=0; WARN=0
 ok()   { echo "  ✅ $1"; PASS=$((PASS+1)); }
 bad()  { echo "  ❌ $1"; FAIL=$((FAIL+1)); }
+warn() { echo "  ⚠️  $1"; WARN=$((WARN+1)); }
+hdr()  { echo; echo "─── $1"; }
 
 echo "═══ Cairn healthcheck — $(date '+%F %H:%M %Z') ═══"
 
-echo
-echo "1. Config"
-[[ -f "$REPO_DIR/.env" ]] && ok ".env present" || bad ".env MISSING — every job will die"
+# ── 1. LIVENESS ───────────────────────────────────────────────────────────────
+hdr "1. LIVENESS — does it work right now?"
+
+[[ -f "$REPO_DIR/.env" ]] && ok ".env present" || bad ".env MISSING — every job dies"
 for V in CONTEXT_DIR NTFY_URL NTFY_TOPIC; do
-  # shellcheck disable=SC1091
-  ( set +u; source "$REPO_DIR/.env" 2>/dev/null; [[ -n "${!V:-}" ]] ) \
-    && ok "$V set" || bad "$V NOT set in .env"
+  [[ -n "${!V:-}" ]] && ok "$V set" || bad "$V not set in .env"
 done
-( set +u; source "$REPO_DIR/.env" 2>/dev/null; [[ -n "${GITHUB_TOKEN:-}" ]] ) \
-  && ok "GITHUB_TOKEN set (code access live)" \
-  || echo "  ⏳ GITHUB_TOKEN not set — Cairn cannot read your code yet (see T17)"
 
-echo
-echo "2. The policy is installed WHERE IT APPLIES"
-if grep -q '"Bash"' "$HOME/.claude/settings.json" 2>/dev/null; then
-  ok "user-level policy has Bash allowed"
-else
-  bad "user-level policy missing/stale — RUN scripts/install-permissions.sh"
-fi
-for LOCAL in "$REPO_DIR/.claude/settings.local.json" "$HOME/.claude/settings.local.json"; do
-  if [[ -f "$LOCAL" ]] && grep -q '"allow": \[[^]]' "$LOCAL" 2>/dev/null; then
-    bad "$(basename "$LOCAL") HAS DRIFTED again — permissions widened by 'always allow' clicks"
-  fi
-done
-[[ $FAIL -eq 0 ]] && ok "no permission drift"
-
-echo
-echo "3. Scheduler"
-if crontab -l 2>/dev/null | grep -q morning-brief; then ok "cron: morning brief scheduled"; else bad "cron: morning brief NOT scheduled"; fi
-if crontab -l 2>/dev/null | grep -q nightly-journal; then ok "cron: nightly journal scheduled"; else bad "cron: nightly journal NOT scheduled"; fi
+crontab -l 2>/dev/null | grep -q morning-brief   && ok "cron: morning brief"   || bad "cron: morning brief NOT scheduled"
+crontab -l 2>/dev/null | grep -q nightly-journal && ok "cron: nightly journal" || bad "cron: nightly journal NOT scheduled"
+crontab -l 2>/dev/null | grep -q backup-context  && ok "cron: backup"          || bad "cron: BACKUP NOT SCHEDULED"
 crontab -l 2>/dev/null | grep -q 'CRON_TZ=America/Los_Angeles' \
-  && ok "CRON_TZ is Pacific (server is UTC — without this the brief fires at 00:30)" \
-  || bad "CRON_TZ MISSING — jobs will fire at the wrong hour"
+  && ok "CRON_TZ Pacific (server is UTC — without this the brief fires at 00:30)" \
+  || bad "CRON_TZ missing — jobs fire at the WRONG HOUR"
 crontab -l 2>/dev/null | grep -q 'npm-global/bin' \
-  && ok "cron PATH includes claude" \
-  || bad "cron PATH missing claude — jobs fail silently, every day"
-if systemctl --user is-enabled agent-morning-brief.timer &>/dev/null; then
-  bad "systemd timer ALSO enabled — you will get DOUBLE briefs. Pick one scheduler."
-else
-  ok "systemd timers disabled (cron is the one scheduler)"
-fi
+  && ok "cron PATH has claude" || bad "cron PATH missing claude — silent daily failure"
 
-echo
-echo "4. Every script exists and is executable"
-for S in run-agent.sh morning-brief.sh nightly-journal.sh notify.sh sync-repos.sh; do
-  [[ -x "$SCRIPT_DIR/$S" ]] && ok "$S" || bad "$S missing or not executable"
-done
-
-echo
-echo "5. The scripts cron will actually invoke exist at those exact paths"
+# Every path cron points at must actually exist. This is how the systemd units were
+# broken for two days: they pointed at ~/agent-machinery, which does not exist.
 while read -r P; do
-  [[ -x "$P" ]] && ok "cron target exists: $(basename "$P")" || bad "CRON POINTS AT A NONEXISTENT PATH: $P"
+  [[ -x "$P" ]] && ok "cron target exists: $(basename "$P")" \
+                || bad "CRON POINTS AT A NONEXISTENT PATH: $P"
 done < <(crontab -l 2>/dev/null | grep -oE '/home/[^ ]*\.sh' | sort -u)
 
-echo
-echo "6. Live end-to-end: can a HEADLESS run actually reach Gmail?"
-GRES=$(cd "$HOME/agent" && timeout 120 claude -p \
-  "Search Gmail newer_than:1d. Reply with ONLY the number of threads, or the single word UNREACHABLE." \
+grep -q '"Bash"' "$HOME/.claude/settings.json" 2>/dev/null \
+  && ok "permission policy installed at the user level (the only layer that applies)" \
+  || bad "policy stale — run scripts/install-permissions.sh"
+
+DRIFT=0
+for L in "$REPO_DIR/.claude/settings.local.json" "$HOME/.claude/settings.local.json"; do
+  [[ -f "$L" ]] && grep -q '"allow": \[[^]]' "$L" 2>/dev/null && { bad "$(basename "$L") HAS DRIFTED — 'always allow' widened your permissions"; DRIFT=1; }
+done
+[[ $DRIFT -eq 0 ]] && ok "no permission drift"
+
+echo "  … testing a real headless Gmail call (this is the one that matters)"
+G=$(cd "${WORKSPACE_DIR:-$HOME/agent}" && timeout 120 claude -p \
+  "Search Gmail newer_than:1d. Reply with ONLY the number of threads, or UNREACHABLE." \
   --allowedTools "mcp__claude_ai_Gmail__search_threads" --max-turns 4 2>/dev/null | tail -1)
-if [[ "$GRES" =~ [0-9] ]]; then
-  ok "headless Gmail OK ($GRES) — the brief can see your mail"
+[[ "$G" =~ [0-9] ]] && ok "headless Gmail OK ($G threads) — the brief can see your mail" \
+                    || bad "HEADLESS GMAIL UNREACHABLE — the brief would be BLIND. Got: '$G'"
+
+"$SCRIPT_DIR/notify.sh" "🩺 healthcheck" "Ran $(date '+%H:%M %Z')." >/dev/null 2>&1 \
+  && ok "ntfy accepted the push" || bad "ntfy FAILED — the agent cannot reach you"
+
+# ── 2. DURABILITY ─────────────────────────────────────────────────────────────
+hdr "2. DURABILITY — will it still be working after a reboot?"
+
+pgrep -f 'Paseo Daemon' >/dev/null && ok "Paseo daemon alive" || bad "Paseo daemon DOWN"
+crontab -l 2>/dev/null | grep -q '@reboot.*paseo-watchdog' \
+  && ok "Paseo restarts on boot (@reboot watchdog)" \
+  || bad "🔴 PASEO WILL NOT SURVIVE A REBOOT — you'd lose the phone channel, SSH only"
+crontab -l 2>/dev/null | grep -q 'paseo-watchdog' \
+  && ok "Paseo watchdog polls (survives a crash, not just a reboot)" \
+  || warn "no watchdog poll — a crash between reboots goes unnoticed"
+
+systemctl is-enabled cron &>/dev/null && ok "cron daemon enabled at boot" \
+                                      || bad "cron NOT enabled at boot — nothing would run"
+
+if systemctl --user is-enabled agent-morning-brief.timer &>/dev/null; then
+  bad "🔴 systemd timer ALSO enabled — DOUBLE BRIEFS. One scheduler only."
 else
-  bad "HEADLESS GMAIL UNREACHABLE — the morning brief would be blind. Got: '$GRES'"
+  ok "systemd timers disabled (cron is the sole scheduler)"
 fi
 
-echo
-echo "7. Notification channel"
-if "$SCRIPT_DIR/notify.sh" "🩺 healthcheck" "Cairn healthcheck ran at $(date '+%H:%M %Z')." >/dev/null 2>&1; then
-  ok "ntfy push accepted (check the phone — accepted != delivered)"
-else
-  bad "ntfy push FAILED — the brief has no way to reach you"
+# ── 3. RECOVERABILITY ─────────────────────────────────────────────────────────
+hdr "3. RECOVERABILITY — does it survive the server dying?"
+
+for R in "$CTX" "$REPO_DIR"; do
+  N="$(basename "$R")"
+  B=$(git -C "$R" rev-parse --abbrev-ref HEAD 2>/dev/null)
+  U=$(git -C "$R" log --oneline "origin/$B..HEAD" 2>/dev/null | wc -l)
+  if [[ "$U" -eq 0 ]]; then ok "$N: fully pushed (offsite copy is current)"
+  elif [[ "$U" -lt 5 ]]; then warn "$N: $U unpushed commit(s)"
+  else bad "$N: $U UNPUSHED COMMITS — that work exists on ONE machine"
+  fi
+done
+
+LO="$CTX/local-only"
+if [[ -d "$LO" ]]; then
+  NEWEST=$(ls -1t "${BACKUP_DIR:-$HOME/backups}"/local-only-*.tar.gz 2>/dev/null | head -1)
+  if [[ -z "$NEWEST" ]]; then
+    bad "local-only/ has NO backup — git ignores it, so this is its ONLY copy on earth"
+  else
+    AGE=$(( ( $(date +%s) - $(stat -c %Y "$NEWEST") ) / 86400 ))
+    [[ $AGE -le 2 ]] && ok "local-only/ snapshot is ${AGE}d old" \
+                     || warn "local-only/ snapshot is ${AGE}d old — backup may be failing"
+  fi
+  warn "3-2-1 NOT met: snapshots live on the SAME box they back up. Pull them off-server."
 fi
 
+# ── 4. BOUNDEDNESS ────────────────────────────────────────────────────────────
+hdr "4. BOUNDEDNESS — can it run away? (an unbounded agent is an unbounded bill)"
+
+grep -q 'flock' "$SCRIPT_DIR/run-agent.sh"   && ok "LOCK: one instance per job (a hang can't stack)"    || bad "no lock — a hung run means jobs PILE UP"
+grep -q 'timeout' "$SCRIPT_DIR/run-agent.sh" && ok "TIMEOUT: hard wall-clock kill on claude -p"         || bad "no timeout — a hang runs FOREVER"
+grep -q 'CIRCUIT BREAKER' "$SCRIPT_DIR/run-agent.sh" \
+  && ok "CIRCUIT BREAKER: max ${AGENT_MAX_RUNS_PER_DAY:-12} runs/job/day, then it refuses and pages you" \
+  || bad "no circuit breaker — a loop bills you until someone notices"
+grep -q 'max-turns' "$SCRIPT_DIR/run-agent.sh" && ok "TURN CAP: bounds tool-call depth per run" || bad "no --max-turns"
+
+RUNAWAY=$(find "$HOME/.agent-logs/state" -name '*.count' -newermt today 2>/dev/null \
+          | xargs -r cat 2>/dev/null | sort -rn | head -1)
+[[ -z "${RUNAWAY:-}" || "${RUNAWAY:-0}" -le 6 ]] && ok "run counts normal today (max ${RUNAWAY:-0})" \
+  || warn "a job ran ${RUNAWAY}x today — investigate before the breaker trips"
+
+# NOTE: `pgrep -fc ... || echo 0` emitted "0\n0" when pgrep found nothing AND exited
+# non-zero, producing a multiline value and an arithmetic error. The healthcheck caught
+# this bug in itself on its first run — which is precisely the argument for having one.
+STUCK=$(pgrep -fc 'claude -p' 2>/dev/null); STUCK=${STUCK:-0}
+[[ "$STUCK" -le 2 ]] && ok "no piled-up claude processes ($STUCK running)" \
+                     || bad "$STUCK concurrent 'claude -p' — something is stuck"
+
+D=$(df --output=pcent / | tail -1 | tr -dc '0-9')
+[[ "$D" -lt 85 ]] && ok "disk ${D}% used" || bad "disk ${D}% — logs or backups are eating the box"
+
+# ── 5. PUBLISHABILITY ─────────────────────────────────────────────────────────
+hdr "5. PUBLISHABILITY — is the PUBLIC repo safe to push?"
+
+HITS=$("$SCRIPT_DIR/pii-scan.sh" "$REPO_DIR" 2>/dev/null || true)
+if [[ -n "$HITS" ]]; then
+  bad "🔴 PII IN THE PUBLIC REPO — do NOT push:"
+  echo "$HITS" | sed 's|^|        |'
+else
+  ok "no emails or IPs in the public repo"
+fi
+grep -q 'PII' "$SCRIPT_DIR/backup-context.sh" \
+  && ok "backup refuses to push the public repo if PII appears" \
+  || bad "backup has no PII gate — it could publish your data automatically"
+
 echo
-echo "═══════════════════════════════════════════"
-echo "  PASS: $PASS    FAIL: $FAIL"
-[[ $FAIL -eq 0 ]] && echo "  ✅ Cairn is healthy." || echo "  ❌ $FAIL problem(s). Fix before trusting the automation."
-echo "═══════════════════════════════════════════"
+echo "═════════════════════════════════════════════"
+printf "  PASS %d   WARN %d   FAIL %d\n" "$PASS" "$WARN" "$FAIL"
+if [[ $FAIL -eq 0 && $WARN -eq 0 ]]; then echo "  ✅ Cairn is healthy on all five properties."
+elif [[ $FAIL -eq 0 ]]; then                echo "  🟡 Working, with $WARN warning(s). Nothing is broken."
+else                                        echo "  ❌ $FAIL FAILURE(S). Do not trust the automation until fixed."
+fi
+echo "═════════════════════════════════════════════"
+
+[[ $FAIL -gt 0 ]] && "$SCRIPT_DIR/notify.sh" "❌ Cairn healthcheck: $FAIL failure(s)" \
+  "The weekly self-audit found $FAIL problem(s). Run scripts/healthcheck.sh on the server." >/dev/null 2>&1
 exit $(( FAIL > 0 ? 1 : 0 ))

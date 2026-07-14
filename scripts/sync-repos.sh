@@ -20,7 +20,7 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
 [[ -f "$REPO_DIR/.env" ]] && { set +u; source "$REPO_DIR/.env"; set -u; }
 
-GH_USER="${GITHUB_USER:-Roman-Young}"
+GH_USER="${GITHUB_USER:?set GITHUB_USER in .env}"
 CODE_DIR="${CODEBASES_DIR:-$HOME/agent/codebases}"
 mkdir -p "$CODE_DIR"
 
@@ -71,7 +71,7 @@ else
   echo "═══ Private repos: none configured ═══"
   echo "  Only needed for LabReach / Rapacon. To enable, add to .env:"
   echo '    GITHUB_TOKEN="github_pat_..."   # fine-grained, READ-ONLY, "Only select repositories"'
-  echo '    GITHUB_PRIVATE_REPOS="Roman-Young/LabReach Roman-Young/rapacon"'
+  echo '    GITHUB_PRIVATE_REPOS="you/private-repo-one you/private-repo-two"'
 fi
 
 echo
