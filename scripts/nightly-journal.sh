@@ -19,10 +19,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 TODAY="$(date +%F)"
-TRANSCRIPT_DIR="$HOME/.claude/projects"
 
-# Transcripts touched in the last 24h. Bash does this; the model never runs find.
-mapfile -t FILES < <(find "$TRANSCRIPT_DIR" -name '*.jsonl' -mtime -1 -size +2k 2>/dev/null | head -25)
+# BOTH transcript sources:
+#   ~/.claude/projects   — sessions that ran ON THE SERVER (Paseo, ssh)
+#   ~/mac-transcripts    — sessions from VS CODE ON THE MAC, rsynced up by mac-sync-install.sh
+# Without the second, the journal covers only half his life — and the half it misses is
+# the half where he actually writes code.
+mapfile -t FILES < <(
+  find "$HOME/.claude/projects" "$HOME/mac-transcripts" \
+       -name '*.jsonl' -mtime -1 -size +2k 2>/dev/null | head -30
+)
 
 if [[ ${#FILES[@]} -eq 0 ]]; then
   echo "No session transcripts in the last 24h — nothing to journal. Exiting cleanly."
