@@ -44,10 +44,17 @@ CAIRN_HOME="$HOME/cairn"
 
 # Working trees to push UP, so you can ask Cairn about uncommitted code from your phone.
 # Leave empty to skip. Editing this list and re-running is safe — it's idempotent.
+# ⚠️ These are the REAL paths, read out of the `cwd` field in Roman's own Claude Code
+# transcripts. They are NOT guesses. The earlier guesses ($HOME/Desktop/LabReach,
+# $HOME/Desktop/rapacon) were wrong in BOTH the folder name and the location — and a wrong
+# path here FAILS SILENTLY: the installer skips a missing directory, reports success, and
+# Cairn stays blind while everyone believes it's fixed. Derive; never guess.
 PROJECTS=(
   "$HOME/Desktop/PEPMatch2.0"
-  # "$HOME/Desktop/LabReach"
-  # "$HOME/Desktop/rapacon"
+  "$HOME/Cold Email Agent"          # LabReach
+  "$HOME/Rapacon-Realty-Website"
+  "$HOME/Personal Website"          # roman-young.dev — the Vercel domain
+  "$HOME/Desktop/PD1"
 )
 
 echo "═══ Installing Cairn on this Mac ═══"
@@ -139,7 +146,11 @@ mkdir -p "$HOME/.cairn" "$CAIRN_HOME"
   echo ''
   echo '# UP: working trees (incl. uncommitted) -> ask Cairn about them from your phone.'
   for P in "${PROJECTS[@]}"; do
-    echo "[ -d \"$P\" ] && rsync -az --delete \"\${EX[@]}\" \"$P/\" \"\$SERVER:~/agent/mac-mirror/$(basename "$P")/\" 2>/dev/null"
+    # Remote dir name: spaces -> dashes. The remote path is re-parsed by a shell on the
+    # server, so a space there silently splits it into separate arguments and the sync
+    # fails with no error anyone sees. -s (--protect-args) is belt; this is braces.
+    REMOTE_NAME="$(basename "$P" | tr ' ' '-')"
+    echo "[ -d \"$P\" ] && rsync -azs --delete \"\${EX[@]}\" \"$P/\" \"\$SERVER:~/agent/mac-mirror/$REMOTE_NAME/\" 2>/dev/null || true"
   done
   echo ''
   echo '# UP: the OUTBOX. Mac-Cairn cannot write memory (read-only mirror, one-writer rule),'
