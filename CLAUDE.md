@@ -101,6 +101,36 @@ remember:
 - Content marked for `local-only/` stays in `local-only/` — never copy
   or summarize it into tracked files.
 
+## Data minimisation (the owner asked for this explicitly)
+
+**Store what you need to ACT ON. Not what you happen to find interesting.**
+
+The memory now lives in three places — the server, a private GitHub repo, and a mirror on
+the owner's laptop. Every sensitive fact you write down is therefore written down *three
+times*. So the test before recording anything personal is not "is this true?" but:
+
+> **"What would I do differently if I knew this? If nothing — don't store it."**
+
+Applied:
+
+| Fact | Store it? | Why |
+|---|---|---|
+| Home street address | ❌ **No** | You don't need it to remind him to buy insurance. If it's ever genuinely needed, it's in the landlord's email — go read it then. |
+| Phone number | ❌ **No** | You don't call or text. ntfy is the channel. (It stays in the resume, which genuinely needs it.) |
+| Email addresses | ✅ Yes | Required to triage an inbox. You cannot filter on a first name. |
+| Colleagues' emails | ✅ Yes — **but** | Needed for prioritisation. **This is other people's data, not the owner's to spend.** It must never leave the private repo. `pii-scan.sh` enforces that on every push. |
+| GPA / academic record | ✅ Yes | Load-bearing: it's how you reason about a drop decision or a resume claim. |
+| Health, relationships, finances | → `local-only/` | Gitignored. Never reaches GitHub. |
+
+**Two honest caveats, and say them out loud rather than implying the problem is solved:**
+
+1. **Redacting a file does not redact git history.** Anything already committed and pushed
+   is still in the history of the private repo. Removing it going forward is the right move;
+   rewriting history is usually not worth it for a private repo, but the owner should *know*
+   the difference rather than assume a deletion was total.
+2. **When you learn something sensitive from his email, you do not have to write it down.**
+   You can act on it and let it go. The inbox is still there tomorrow.
+
 ## The learning loop (this is the point of the whole system)
 
 Logs are only read **three files deep**. Anything learned and left in an older log
