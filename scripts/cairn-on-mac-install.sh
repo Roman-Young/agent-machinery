@@ -29,7 +29,17 @@
 # ══════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
 
-SERVER="${SERVER:-}"
+# ── The server address. Supply it however you like; if you don't, we ask. ─────
+# It is NOT hardcoded: this repo is public, and a server IP + login in a public repo is
+# an invitation to brute-force. (An earlier version DID hardcode it. Scrubbing that is
+# what broke this script — the default was removed and nothing replaced it, so SERVER was
+# empty and ssh-copy-id hung on nothing. Fixed 2026-07-14.)
+SERVER="${1:-${SERVER:-}}"
+if [[ -z "$SERVER" ]]; then
+  read -rp "Server (user@host, e.g. roman@203.0.113.9): " SERVER
+fi
+[[ -n "$SERVER" ]] || { echo "❌ No server given. Re-run: bash $0 user@host"; exit 1; }
+
 CAIRN_HOME="$HOME/cairn"
 
 # Working trees to push UP, so you can ask Cairn about uncommitted code from your phone.
@@ -44,22 +54,62 @@ echo "═══ Installing Cairn on this Mac ═══"
 echo "server: $SERVER"
 echo
 
-# ── 1. Passwordless SSH (the background job cannot type a password) ────────────
-if [[ ! -f "$HOME/.ssh/id_ed25519" && ! -f "$HOME/.ssh/id_rsa" ]]; then
-  echo "No SSH key on this Mac. Creating one..."
-  ssh-keygen -t ed25519 -N "" -f "$HOME/.ssh/id_ed25519"
-fi
-echo "Authorizing this Mac on the server (you may be asked for the server password ONCE)..."
-ssh-copy-id -o StrictHostKeyChecking=accept-new "$SERVER" 2>/dev/null || true
+# ── 1. NON-INTERACTIVE SSH ────────────────────────────────────────────────────
+# The background sync runs with no terminal. It cannot type a password, and it cannot
+# type a KEY PASSPHRASE either — which is the subtler trap, because interactive ssh works
+# fine and you'd never notice. On macOS the fix is the login Keychain: store the passphrase
+# once, and ssh (including from launchd) retrieves it silently.
+HOST="${SERVER#*@}"
 
-if ! ssh -o BatchMode=yes -o ConnectTimeout=8 "$SERVER" true 2>/dev/null; then
-  echo "❌ Passwordless SSH isn't working, and a background job can't type a password."
-  echo "   Fix with:  ssh-copy-id $SERVER"
-  echo "   (If you don't know the server password: Hetzner Console → Rescue →"
-  echo "    Reset root password → web Console → 'passwd roman')"
-  exit 1
+ssh_works() { ssh -o BatchMode=yes -o ConnectTimeout=8 "$SERVER" true 2>/dev/null; }
+
+if ssh_works; then
+  echo "✅ non-interactive SSH already works"
+else
+  echo "Setting up non-interactive SSH…"
+
+  if [[ ! -f "$HOME/.ssh/id_ed25519" && ! -f "$HOME/.ssh/id_rsa" ]]; then
+    echo "  no SSH key found — creating one (no passphrase, for automation)"
+    ssh-keygen -t ed25519 -N "" -f "$HOME/.ssh/id_ed25519"
+  fi
+  KEY="$HOME/.ssh/id_ed25519"; [[ -f "$KEY" ]] || KEY="$HOME/.ssh/id_rsa"
+
+  # Teach ssh to use the Keychain for this host, so launchd never sees a prompt.
+  touch "$HOME/.ssh/config"; chmod 600 "$HOME/.ssh/config"
+  if ! grep -qE "^[[:space:]]*Host[[:space:]].*\b${HOST}\b" "$HOME/.ssh/config" 2>/dev/null; then
+    printf '\nHost %s\n  User %s\n  AddKeysToAgent yes\n  UseKeychain yes\n  IdentityFile %s\n  ServerAliveInterval 60\n' \
+      "$HOST" "${SERVER%@*}" "$KEY" >> "$HOME/.ssh/config"
+    echo "  ✅ added a Host block to ~/.ssh/config (UseKeychain)"
+  fi
+
+  # Store the passphrase in the login Keychain. Prompts ONCE, here, with a terminal.
+  # This is the step that makes the background job work.
+  echo "  → If your key has a passphrase, enter it ONCE now. macOS will remember it."
+  ssh-add --apple-use-keychain "$KEY" 2>/dev/null || ssh-add -K "$KEY" 2>/dev/null || true
+
+  # Only now, if we still can't get in, is the key actually not authorized on the server.
+  if ! ssh_works; then
+    echo "  key not authorized on the server yet — copying it up (enter your SERVER password once)"
+    ssh-copy-id -o StrictHostKeyChecking=accept-new "$SERVER" || true
+  fi
+
+  if ! ssh_works; then
+    cat <<EOF
+
+❌ Non-interactive SSH still isn't working, and the background sync cannot type anything.
+
+Try, in order:
+  1.  ssh-add --apple-use-keychain ~/.ssh/id_ed25519     # store the passphrase
+  2.  ssh-copy-id $SERVER                                # authorize this Mac
+  3.  ssh -o BatchMode=yes $SERVER true && echo OK       # must print OK
+
+If you don't know the server password:
+  Hetzner Console → Rescue → Reset root password → web Console → 'passwd roman'
+EOF
+    exit 1
+  fi
 fi
-echo "✅ passwordless SSH works"
+echo "✅ non-interactive SSH works (the background job can now run unattended)"
 
 # ── 2. ONE sync script, all three directions ──────────────────────────────────
 mkdir -p "$HOME/.cairn" "$CAIRN_HOME"
