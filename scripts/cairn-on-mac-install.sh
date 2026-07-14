@@ -224,7 +224,7 @@ discover_projects 2>/dev/null | while IFS= read -r P; do
   # And the error is SHOWN, not swallowed. `2>/dev/null` is why the last run printed a
   # bare "FAILED:" with no reason — a silent failure is the one thing this system is not
   # allowed to do.
-  if ERR=$(rsync -az --delete "${EX[@]}" "$P/" "$SERVER:agent/mac-mirror/$REMOTE_NAME/" 2>&1); then
+  if ERR=$(rsync -az --delete --delete-excluded "${EX[@]}" "$P/" "$SERVER:agent/mac-mirror/$REMOTE_NAME/" 2>&1); then
     echo "  synced: $REMOTE_NAME"
   else
     echo "  FAILED: $REMOTE_NAME"

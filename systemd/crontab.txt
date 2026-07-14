@@ -2,54 +2,66 @@
 # Install with:  crontab agent-machinery/systemd/crontab.txt
 # This file is the SOURCE OF TRUTH for the schedule. Edit here, then re-install.
 #
-# Scheduler: CRON. The systemd timers are installed but DISABLED.
-# ⚠️ NEVER RUN BOTH — every job would fire twice a day. install-timers.sh now refuses
-# if these cron lines exist.
+# ⚠️⚠️ ALL TIMES BELOW ARE **UTC**. THE SERVER IS UTC. ⚠️⚠️
 #
-# CRON_TZ is load-bearing: the server runs Etc/UTC. Without it, "30 7" means 07:30 UTC =
-# 00:30 Pacific, and the "morning" brief lands at half past midnight. It also tracks the
-# PDT/PST switch, so the schedule doesn't drift an hour twice a year.
-CRON_TZ=America/Los_Angeles
+# There is NO CRON_TZ line, and there must never be one:
+# **Debian/Ubuntu cron SILENTLY IGNORES CRON_TZ.** It was set to America/Los_Angeles for
+# a full day, and the "07:30 morning brief" fired at 07:30 *UTC* — i.e. **00:30 Pacific**,
+# half past midnight. The log proved it (`job=morning-brief starting ... T07:30:01+00:00`)
+# while the crontab *looked* completely correct. Config that looks right is not config
+# that is right.
+#
+# THE FIX: fire at BOTH UTC times that could match the target local hour (one for PDT,
+# one for PST), and let run-local.sh check the real local clock and pass exactly one
+# through. The DST twin exits instantly and costs nothing. DST-proof, no sudo, and the
+# pattern Debian's own crontab(5) man page recommends.
+#
+#   PDT (UTC-7)  |  PST (UTC-8)
+#   07:30 local  =  14:30 UTC  |  15:30 UTC
+#   01:45 local  =  08:45 UTC  |  09:45 UTC
+#   02:15 local  =  09:15 UTC  |  10:15 UTC
+#   09:00 local  =  16:00 UTC  |  17:00 UTC
+#   04:00 local  =  11:00 UTC  |  12:00 UTC
 
-# cron starts with a near-empty PATH. Without this line `claude` is simply NOT FOUND and
-# every job fails silently, every day, with no error anyone would ever see.
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/roman/.npm-global/bin
 SHELL=/bin/bash
 MAILTO=""
+S=/home/roman/agent/agent-machinery/scripts
 
-# ── PHONE CHANNEL: survive a reboot ──────────────────────────────────────────
-# Paseo was started by hand and had no supervisor. A reboot killed it permanently,
-# leaving SSH as the only way back to the agent — the exact thing this system exists to
-# avoid. The watchdog never touches a healthy daemon; it only acts when one is missing,
-# and it pushes to the phone either way, so a failure is never silent.
+# ── PHONE CHANNEL: survive a reboot (timezone-independent) ───────────────────
+# Paseo was hand-started with no supervisor: a reboot killed it permanently, leaving SSH
+# as the only way back — the exact thing this system exists to avoid. The watchdog never
+# touches a healthy daemon, so it cannot cause the outage it prevents.
 @reboot        sleep 30 && /home/roman/agent/agent-machinery/scripts/paseo-watchdog.sh --boot >> /home/roman/.agent-logs/paseo.log 2>&1
 */10 * * * *   /home/roman/agent/agent-machinery/scripts/paseo-watchdog.sh >> /home/roman/.agent-logs/paseo.log 2>&1
 
-# ── THE DAILY AGENT ──────────────────────────────────────────────────────────
-# Journal at 01:45 (not 23:00): the deep-work block runs ~10pm-1am, so an earlier journal
-# would systematically miss the three most productive hours of the day.
-30 7 * * *     /home/roman/agent/agent-machinery/scripts/morning-brief.sh >> /home/roman/.agent-logs/cron.log 2>&1
-45 1 * * *     /home/roman/agent/agent-machinery/scripts/nightly-journal.sh >> /home/roman/.agent-logs/cron.log 2>&1
+# ── THE DAILY AGENT (local-time guarded) ─────────────────────────────────────
+# Journal at 01:45 local, NOT earlier: the deep-work block runs ~10pm-1am, so a journal
+# before then would systematically miss the three most productive hours of the day.
+30 14,15 * * *  /home/roman/agent/agent-machinery/scripts/run-local.sh 07:30 /home/roman/agent/agent-machinery/scripts/morning-brief.sh   >> /home/roman/.agent-logs/cron.log 2>&1
+45 8,9   * * *  /home/roman/agent/agent-machinery/scripts/run-local.sh 01:45 /home/roman/agent/agent-machinery/scripts/nightly-journal.sh >> /home/roman/.agent-logs/cron.log 2>&1
 
-# ── BACKUP ───────────────────────────────────────────────────────────────────
-# Runs AFTER the journal so the day's log is included. Was NEVER SCHEDULED until
-# 2026-07-14 — 25 commits and the entire memory layer sat on one box with a 2-day-stale
-# copy on GitHub. Includes a PII gate that refuses to push the PUBLIC repo if it detects
-# emails or IPs.
-15 2 * * *     /home/roman/agent/agent-machinery/scripts/backup-context.sh >> /home/roman/.agent-logs/backup.log 2>&1
+# ── BACKUP (runs AFTER the journal so the day's log is included) ─────────────
+# Was NEVER SCHEDULED until 2026-07-14: 25 commits and the entire memory layer sat on one
+# box. Includes a PII gate that refuses to push the PUBLIC repo if it finds emails or IPs.
+15 9,10  * * *  /home/roman/agent/agent-machinery/scripts/run-local.sh 02:15 /home/roman/agent/agent-machinery/scripts/backup-context.sh >> /home/roman/.agent-logs/backup.log 2>&1
 
-# ── OUTBOX ───────────────────────────────────────────────────────────────────
-# Mac-Cairn (in VS Code) cannot write memory — one-writer rule. It leaves REQUESTS in an
-# outbox instead, and this applies them. Without it, a task added while coding goes NOWHERE.
-# Hourly, but it exits instantly and spends ZERO tokens when the outbox is empty.
+# ── OUTBOX (timezone-independent) ────────────────────────────────────────────
+# Mac-Cairn cannot write memory (one-writer rule), so it leaves REQUESTS in an outbox.
+# Without this, a task added while coding in VS Code goes NOWHERE. Exits instantly and
+# spends ZERO tokens when the outbox is empty.
 7 * * * *      /home/roman/agent/agent-machinery/scripts/process-outbox.sh >> /home/roman/.agent-logs/outbox.log 2>&1
 
-# ── WEEKLY SELF-AUDIT ────────────────────────────────────────────────────────
-# Catches permission drift, a dead scheduler, a broken connector, a stale backup —
-# BEFORE they cost a silent morning. Sunday 9am.
-0 9 * * 0      /home/roman/agent/agent-machinery/scripts/healthcheck.sh >> /home/roman/.agent-logs/health.log 2>&1
+# ── CODE MIRROR: refresh the GitHub clones (timezone-independent) ────────────
+# Was never scheduled — the clones went stale the moment they were made.
+40 * * * *     /home/roman/agent/agent-machinery/scripts/sync-repos.sh >> /home/roman/.agent-logs/sync-repos.log 2>&1
 
-# ── LOG ROTATION ─────────────────────────────────────────────────────────────
-# Logs grew unbounded until 2026-07-14 (paseo daemon.log hit 6.3MB in two days).
-0 4 * * 1      /usr/sbin/logrotate -s /home/roman/.agent-logs/logrotate.state /home/roman/agent/agent-machinery/scripts/logrotate.conf >> /home/roman/.agent-logs/cron.log 2>&1
+# ── WEEKLY SELF-AUDIT — Sunday 09:00 local ──────────────────────────────────
+# Catches permission drift, a dead scheduler, a broken connector, a stale backup, a Mac
+# that stopped syncing — BEFORE any of them costs a silent morning.
+0 16,17 * * 0  /home/roman/agent/agent-machinery/scripts/run-local.sh 09:00 /home/roman/agent/agent-machinery/scripts/healthcheck.sh >> /home/roman/.agent-logs/health.log 2>&1
+
+# ── LOG ROTATION — Monday 04:00 local ───────────────────────────────────────
+# Logs grew unbounded until 2026-07-14 (the paseo daemon log hit 6.3MB in two days).
+0 11,12 * * 1  /home/roman/agent/agent-machinery/scripts/run-local.sh 04:00 /usr/sbin/logrotate -s /home/roman/.agent-logs/logrotate.state /home/roman/agent/agent-machinery/scripts/logrotate.conf >> /home/roman/.agent-logs/cron.log 2>&1
 # ─────────────────────────────────────────────────────────────────────────────

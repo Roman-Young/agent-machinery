@@ -20,7 +20,16 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
 [[ -f "$REPO_DIR/.env" ]] && { set +u; source "$REPO_DIR/.env"; set -u; }
 
-GH_USER="${GITHUB_USER:?set GITHUB_USER in .env}"
+# Derive the GitHub handle from the remote that's already configured, rather than making
+# the user maintain it in .env. (I scheduled this hourly BEFORE running it once — it would
+# have failed every hour with `GITHUB_USER: set GITHUB_USER in .env`. Schedule nothing you
+# have not executed.)
+GH_USER="${GITHUB_USER:-$(git -C "$REPO_DIR" remote get-url origin 2>/dev/null \
+  | sed -E 's#.*[:/]([^/]+)/[^/]+\.git$#\1#')}"
+if [[ -z "$GH_USER" ]]; then
+  echo "sync-repos: cannot determine the GitHub user (set GITHUB_USER in .env). Skipping." >&2
+  exit 0   # skip cleanly; a scheduled job must not spam failures forever
+fi
 CODE_DIR="${CODEBASES_DIR:-$HOME/agent/codebases}"
 mkdir -p "$CODE_DIR"
 

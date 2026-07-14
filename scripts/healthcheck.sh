@@ -48,6 +48,11 @@ hdr()  { echo; echo "─── $1"; }
 
 echo "═══ Cairn healthcheck — $(date '+%F %H:%M %Z') ═══"
 
+# Hoisted: used by BOTH recoverability (is the 2nd backup copy real?) and durability
+# (is the laptop still talking to us?). It was computed after its first use, so the
+# 3-2-1 check silently read an empty variable and warned when it should have passed.
+MACLAST=$(find "$HOME/mac-transcripts" "$HOME/agent/mac-mirror" -type f -printf '%T@\n' 2>/dev/null | sort -rn | head -1)
+
 # ── 1. LIVENESS ───────────────────────────────────────────────────────────────
 hdr "1. LIVENESS — does it work right now?"
 
@@ -59,11 +64,38 @@ done
 crontab -l 2>/dev/null | grep -q morning-brief   && ok "cron: morning brief"   || bad "cron: morning brief NOT scheduled"
 crontab -l 2>/dev/null | grep -q nightly-journal && ok "cron: nightly journal" || bad "cron: nightly journal NOT scheduled"
 crontab -l 2>/dev/null | grep -q backup-context  && ok "cron: backup"          || bad "cron: BACKUP NOT SCHEDULED"
-crontab -l 2>/dev/null | grep -q 'CRON_TZ=America/Los_Angeles' \
-  && ok "CRON_TZ Pacific (server is UTC — without this the brief fires at 00:30)" \
-  || bad "CRON_TZ missing — jobs fire at the WRONG HOUR"
+# ⚠️ DO NOT "CHECK THE TIMEZONE" BY READING THE CRONTAB. That check passed ✅ for a
+# full day while the morning brief fired at 00:30 Pacific, because Debian cron SILENTLY
+# IGNORES CRON_TZ. Config that looks right is not config that is right.
+# VERIFY THE BEHAVIOUR: did the job actually run, and at the right LOCAL time?
+crontab -l 2>/dev/null | grep -qE '^[[:space:]]*CRON_TZ[[:space:]]*=' \
+  && bad "🔴 CRON_TZ is SET in the crontab — Debian cron IGNORES it. Jobs will fire in UTC." \
+  || ok "no CRON_TZ (correct — Debian ignores it; run-local.sh guards local time instead)"
+crontab -l 2>/dev/null | grep -q 'run-local.sh' \
+  && ok "jobs are local-time guarded (DST-proof, fires at both UTC twins)" \
+  || bad "no run-local.sh guard — jobs will fire at the wrong local hour"
 crontab -l 2>/dev/null | grep -q 'npm-global/bin' \
   && ok "cron PATH has claude" || bad "cron PATH missing claude — silent daily failure"
+
+# THE REAL TEST: when did the brief LAST ACTUALLY RUN, in local time?
+BLOG=$(ls -t "$HOME"/.agent-logs/*-morning-brief.log 2>/dev/null | head -1)
+if [[ -n "$BLOG" ]]; then
+  # ⚠️ KEEP THE TIMEZONE OFFSET (+00:00). The previous regex stopped at the seconds and
+  # dropped it, so `date -d` read a UTC stamp as if it were already local — and this check
+  # reported "07:30 local ✅" for a job that actually ran at 00:30 local. THE CHECK BUILT
+  # TO CATCH THE TIMEZONE BUG REPRODUCED THE TIMEZONE BUG. Twice-burned; hence the comment.
+  LASTRUN=$(grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+\+[0-9:]+' "$BLOG" 2>/dev/null | tail -1)
+  if [[ -n "$LASTRUN" ]]; then
+    LOCALH=$(TZ="${LOCAL_TZ:-America/Los_Angeles}" date -d "$LASTRUN" +%H:%M 2>/dev/null)
+    if [[ "$LOCALH" == "07:3"* ]]; then
+      ok "brief last ran at $LOCALH local — the RIGHT hour (verified from the log, not the config)"
+    else
+      bad "🔴 brief last ran at $LOCALH LOCAL — WRONG HOUR. It should be ~07:30."
+    fi
+  fi
+else
+  warn "the morning brief has no log yet — it has never run"
+fi
 
 # Every path cron points at must actually exist. This is how the systemd units were
 # broken for two days: they pointed at ~/agent-machinery, which does not exist.
@@ -135,7 +167,26 @@ if [[ -d "$LO" ]]; then
     [[ $AGE -le 2 ]] && ok "local-only/ snapshot is ${AGE}d old" \
                      || warn "local-only/ snapshot is ${AGE}d old — backup may be failing"
   fi
-  warn "3-2-1 NOT met: snapshots live on the SAME box they back up. Pull them off-server."
+  # 3-2-1 is satisfied ONLY if a second machine is pulling the tarballs. The Mac sync
+  # does that — but only while the Mac is actually syncing. Tie it to the real signal.
+  if [[ -n "${MACLAST:-}" && $(( ( $(date +%s) - ${MACLAST%.*} ) / 86400 )) -le 3 ]]; then
+    ok "3-2-1 met: the Mac is pulling backups to a 2nd machine (synced recently)"
+  else
+    warn "3-2-1 AT RISK: snapshots sit on the box they back up, and the Mac isn't syncing"
+  fi
+fi
+
+# Is the LAPTOP still talking to us? If it stops (lid shut for days, key expired,
+# network), Cairn keeps reading a frozen copy of his code and confidently advising on it.
+# Silent staleness is the most dangerous state this system has, because everything LOOKS fine.
+if [[ -n "$MACLAST" ]]; then
+  MACAGE=$(( ( $(date +%s) - ${MACLAST%.*} ) / 3600 ))
+  if   [[ $MACAGE -le 24 ]]; then ok "Mac synced ${MACAGE}h ago — your code and chats are current"
+  elif [[ $MACAGE -le 72 ]]; then warn "Mac hasn't synced in ${MACAGE}h — code/chats may be stale"
+  else bad "🔴 Mac hasn't synced in ${MACAGE}h — Cairn is reading STALE code and giving advice on it"
+  fi
+else
+  warn "no Mac data at all — cairn-on-mac-install.sh not run?"
 fi
 
 # ── 4. BOUNDEDNESS ────────────────────────────────────────────────────────────
