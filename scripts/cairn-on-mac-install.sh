@@ -44,18 +44,30 @@ CAIRN_HOME="$HOME/cairn"
 
 # Working trees to push UP, so you can ask Cairn about uncommitted code from your phone.
 # Leave empty to skip. Editing this list and re-running is safe — it's idempotent.
-# ⚠️ These are the REAL paths, read out of the `cwd` field in Roman's own Claude Code
-# transcripts. They are NOT guesses. The earlier guesses ($HOME/Desktop/LabReach,
-# $HOME/Desktop/rapacon) were wrong in BOTH the folder name and the location — and a wrong
-# path here FAILS SILENTLY: the installer skips a missing directory, reports success, and
-# Cairn stays blind while everyone believes it's fixed. Derive; never guess.
-PROJECTS=(
-  "$HOME/Desktop/PEPMatch2.0"
-  "$HOME/Cold Email Agent"          # LabReach
-  "$HOME/Rapacon-Realty-Website"
-  "$HOME/Personal Website"          # roman-young.dev — the Vercel domain
-  "$HOME/Desktop/PD1"
-)
+# ── PROJECT DISCOVERY — you should never have to edit this file again ─────────
+#
+# A hardcoded list means every new project needs an edit and a re-install. That is not a
+# system, it is a chore, and chores get skipped — after which Cairn is silently blind to
+# your newest work and nobody notices.
+#
+# So it DISCOVERS instead. Claude Code records the working directory of every session in
+# ~/.claude/projects/*/*.jsonl. Any folder where you have ever run `claude` is therefore
+# self-announcing. Start a new project, use Cairn in it once, and the next sync (≤5 min)
+# picks it up. Zero maintenance, forever.
+#
+# Guarded, because "sync everything the user ever cd'd into" is how you ship 40GB of
+# Downloads over a home connection:
+#   - must still exist
+#   - must live under $HOME
+#   - must LOOK like a project (.git / package.json / pyproject.toml / Cargo.toml / *.Rproj)
+#     -> this alone excludes ~/Downloads/filtered_gene_bc_matrices (a dataset, not code)
+#   - must not be a denied path (Downloads, Library, .Trash, the home dir itself)
+#   - capped at MAX_PROJECTS, so a runaway can't fill the server
+#
+# EXTRA_PROJECTS below is an escape hatch for anything that doesn't fit the heuristic.
+EXTRA_PROJECTS=()
+DENY_RE='/(Downloads|Library|Applications|\.Trash|node_modules|\.git)(/|$)'
+MAX_PROJECTS=12
 
 echo "═══ Installing Cairn on this Mac ═══"
 echo "server: $SERVER"
@@ -144,14 +156,55 @@ mkdir -p "$HOME/.cairn" "$CAIRN_HOME"
   echo "  rsync -az --include '*/' --include '*.jsonl' --exclude '*' \\"
   echo '    "$HOME/.claude/projects/" "$SERVER:~/mac-transcripts/" 2>/dev/null'
   echo ''
-  echo '# UP: working trees (incl. uncommitted) -> ask Cairn about them from your phone.'
-  for P in "${PROJECTS[@]}"; do
-    # Remote dir name: spaces -> dashes. The remote path is re-parsed by a shell on the
-    # server, so a space there silently splits it into separate arguments and the sync
-    # fails with no error anyone sees. -s (--protect-args) is belt; this is braces.
-    REMOTE_NAME="$(basename "$P" | tr ' ' '-')"
-    echo "[ -d \"$P\" ] && rsync -azs --delete \"\${EX[@]}\" \"$P/\" \"\$SERVER:~/agent/mac-mirror/$REMOTE_NAME/\" 2>/dev/null || true"
-  done
+  echo '# UP: working trees (incl. UNCOMMITTED work) — DISCOVERED, not hardcoded.'
+  echo '# Every folder you have ever run Claude Code in announces itself in the transcripts.'
+  echo '# A new project needs NO setup: use Cairn in it once, and the next sync mirrors it.'
+  echo "DENY_RE='$DENY_RE'"
+  echo "MAX_PROJECTS=$MAX_PROJECTS"
+  printf 'EXTRA_PROJECTS=('
+  for E in ${EXTRA_PROJECTS[@]+"${EXTRA_PROJECTS[@]}"}; do printf '"%s" ' "$E"; done
+  echo ')'
+  cat <<'DISCOVER'
+
+discover_projects() {
+  { for D in "$HOME"/.claude/projects/*/; do
+      F=$(find "$D" -maxdepth 1 -name '*.jsonl' -print -quit 2>/dev/null)
+      [ -n "$F" ] || continue
+      CWD=$(python3 -c "
+import json,sys
+for l in open(sys.argv[1], errors='ignore'):
+    try:
+        o=json.loads(l)
+        if o.get('cwd'): print(o['cwd']); break
+    except Exception: pass
+" "$F" 2>/dev/null)
+      [ -n "$CWD" ] && printf '%s\n' "$CWD"
+    done
+    for E in ${EXTRA_PROJECTS[@]+"${EXTRA_PROJECTS[@]}"}; do printf '%s\n' "$E"; done
+  } | sort -u | while IFS= read -r P; do
+      [ -d "$P" ]                          || continue   # gone
+      case "$P" in "$HOME"/*) ;; *) continue;; esac       # must be under $HOME
+      [ "$P" = "$HOME" ] && continue                      # not the home dir itself
+      printf '%s' "$P" | grep -qE "$DENY_RE" && continue  # denied
+      # must LOOK like a project, not a data dump
+      if [ -d "$P/.git" ] || [ -f "$P/package.json" ] || [ -f "$P/pyproject.toml" ] \
+         || [ -f "$P/Cargo.toml" ] || [ -f "$P/requirements.txt" ] \
+         || ls "$P"/*.Rproj >/dev/null 2>&1; then
+        printf '%s\n' "$P"
+      fi
+    done | head -n "$MAX_PROJECTS"
+}
+
+for P in $(discover_projects | tr '\n' '\v' | sed 's/\v/\n/g'); do :; done
+discover_projects | while IFS= read -r P; do
+  REMOTE_NAME=$(basename "$P" | tr ' ' '-')
+  # -s (--protect-args): the REMOTE path is re-parsed by a shell on the server, so a
+  # space in "Cold Email Agent" would silently split into three arguments and the sync
+  # would fail with no error anyone ever sees.
+  rsync -azs --delete "${EX[@]}" "$P/" "$SERVER:~/agent/mac-mirror/$REMOTE_NAME/" 2>/dev/null \
+    && echo "  synced: $REMOTE_NAME" || echo "  FAILED: $REMOTE_NAME"
+done
+DISCOVER
   echo ''
   echo '# UP: the OUTBOX. Mac-Cairn cannot write memory (read-only mirror, one-writer rule),'
   echo '# so it leaves REQUESTS here instead. The server applies them. Without this, a task'
@@ -312,7 +365,7 @@ If it knows about PEPMatch, Salk, and the 2-indel PR — Cairn is home.
   backups       : $CAIRN_HOME/backups      ← the 2nd copy. This is what makes it a backup.
   identity      : ~/.claude/CLAUDE.md
   sync log      : tail ~/.cairn/sync.log
-  add projects  : edit PROJECTS in this script, re-run it
+  add projects  : NOTHING TO DO. Use Cairn in the folder once; it self-registers.
   uninstall     : launchctl unload $PLIST && rm ~/.claude/CLAUDE.md
 ═══════════════════════════════════════════════════════════════
 EOF
