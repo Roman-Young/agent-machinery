@@ -65,7 +65,15 @@ notify() { "$SCRIPT_DIR/notify.sh" "$1" "$2" >/dev/null 2>&1 || true; }
 # Runs per job per day. If a job fires far more often than its schedule allows,
 # something is wrong — a loop, a duplicated cron entry, a script calling itself.
 # Trip, refuse, and page. Better a missed brief than an unbounded bill.
-MAX_RUNS_PER_DAY="${AGENT_MAX_RUNS_PER_DAY:-12}"
+# Per-job cap. The breaker exists to catch a RUNAWAY (a job looping every minute), not
+# to throttle legitimate hourly work. So hourly jobs get a higher ceiling than the daily
+# ones — 30 comfortably clears 24 invocations/day, but 1440 (once a minute) still trips.
+# A job dropping a real task because it hit a limit meant for a loop is the WORST outcome:
+# it's silent, and it's exactly the "things slip" failure this whole system fights.
+case "$JOB_NAME" in
+  process-outbox|sync-repos) MAX_RUNS_PER_DAY="${AGENT_MAX_RUNS_PER_DAY_HOURLY:-30}" ;;
+  *)                         MAX_RUNS_PER_DAY="${AGENT_MAX_RUNS_PER_DAY:-12}" ;;
+esac
 COUNT_FILE="$STATE_DIR/${JOB_NAME}.$(date +%F).count"
 COUNT=$(( $(cat "$COUNT_FILE" 2>/dev/null || echo 0) + 1 ))
 echo "$COUNT" > "$COUNT_FILE"
