@@ -139,7 +139,11 @@ mkdir -p "$HOME/.cairn" "$CAIRN_HOME"
   echo "SERVER=\"$SERVER\""
   echo ''
   echo '# Big build junk must never cross the wire. .pepidx index files alone are huge.'
-  echo "EX=(--exclude '.git/objects' --exclude node_modules --exclude venv --exclude .venv \\"
+  echo '# --max-size: skip DATA, keep CODE. Roman'"'"'s PD1 project shipped 394MB of raw TCGA'
+  echo '# matrices (data.csv, twice) — re-mirrored on a schedule, that quietly eats a disk over'
+  echo '# months. A source file is essentially never >25MB. Cairn needs to READ your code, not'
+  echo '# hoard your datasets; if it ever needs the data it can ask.'
+  echo "EX=(--max-size=25m --exclude '.git/objects' --exclude node_modules --exclude venv --exclude .venv \\"
   echo "    --exclude target --exclude __pycache__ --exclude '*.pyc' --exclude .DS_Store \\"
   echo "    --exclude '*.pepidx' --exclude '*.pkl' --exclude '*.so' --exclude dist \\"
   echo "    --exclude build --exclude .next --exclude '*.rds' --exclude '*.h5' --exclude '*.bam')"
@@ -196,7 +200,13 @@ for l in open(sys.argv[1], errors='ignore'):
 }
 
 for P in $(discover_projects | tr '\n' '\v' | sed 's/\v/\n/g'); do :; done
-discover_projects | while IFS= read -r P; do
+SKIPPED=$(discover_projects 2>&1 >/dev/null | grep '^SKIP' | cut -f2- || true)
+if [ -n "$SKIPPED" ]; then
+  echo "  ⚠️  NOT synced (no project marker — run 'git init' in it and Cairn picks it up):"
+  echo "$SKIPPED" | sed 's|^|        |'
+fi
+
+discover_projects 2>/dev/null | while IFS= read -r P; do
   REMOTE_NAME=$(basename "$P" | tr ' ' '-')
 
   # ⚠️ NO -s / --protect-args, AND NO TILDE. Both were bugs, 2026-07-14:
