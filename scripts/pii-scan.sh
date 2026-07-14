@@ -21,7 +21,9 @@ set -uo pipefail
 TARGET="${1:?usage: pii-scan.sh <dir>}"
 
 # Not personal identifiers, and they legitimately appear in infrastructure code.
-ALLOW_IP='^(0\.0\.0\.0|127\.0\.0\.1|1\.1\.1\.1|8\.8\.8\.8|255\.|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)'
+#   loopback / private / well-known public DNS, plus the RFC 5737 documentation ranges
+#   (192.0.2.x, 198.51.100.x, 203.0.113.x) which exist SPECIFICALLY to be used as examples.
+ALLOW_IP='^(0\.0\.0\.0|127\.|1\.1\.1\.1|8\.8\.8\.8|255\.|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.0\.2\.|198\.51\.100\.|203\.0\.113\.)'
 ALLOW_EMAIL='(git@github\.com|noreply@|no-reply@|example\.(com|org)|user@example|you@|your-|someone@)'
 
 HITS=""
