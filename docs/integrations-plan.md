@@ -80,32 +80,86 @@ changes, must survive SSO/2FA. Not needed. Don't build it speculatively.
 
 ---
 
-## 2. Multi-account Gmail
+## 2. The five inboxes (updated 2026-07-13 — this replaces the earlier two-account plan)
 
-**The question: Cairn currently sees one Gmail. How does it see the others?**
+**Roman has five email accounts. Cairn reads one.**
 
-First — **which accounts, and what for?** The right architecture depends entirely on
-this, and it's the one thing I can't answer for you (see the gap list). Assume for now:
-personal `romanyoung9981@gmail.com` (connected) + **UCSD `@ucsd.edu`** (not connected)
-+ possibly others.
+| # | Address | What | Cairn sees it | Forward it in? |
+|---|---|---|---|---|
+| 1 | `romanyoung9981@gmail.com` | Primary personal | ✅ **the connected one** | — (destination) |
+| 2 | `romankryoung@gmail.com` | Second personal | ❌ | ✅ **yes — trivial, do it** |
+| 3 | `r5young@ucsd.edu` | School | ❌ | ✅ **yes — highest value** |
+| 4 | `ryoung@lji.org` | **Work — LJI** | ❌ | 🛑 **STOP. Policy check first.** |
+| 5 | `ryoung@salk.edu` | **Work — Salk** (Outlook/Exchange) | ❌ | 🛑 **STOP. Policy check first.** |
 
-### Option A — Forward UCSD into personal Gmail, with a label ✅ RECOMMENDED, DO THIS NOW
+**The uncomfortable fact:** the senders Roman misses most — **Dan, Danish, Ivy, Eduard** —
+almost certainly write to inboxes **4 and 5**, which are exactly the two Cairn must not
+naively slurp. The easy 80% of this integration does not cover the mail that matters most.
 
-Don't connect a second account. **Route the mail into the one Cairn already reads.**
+### 🛑 Why the work inboxes are not a forwarding problem
+
+Do **not** set up auto-forwarding from `lji.org` or `salk.edu` until Roman has checked
+their acceptable-use policies. Three separate reasons, any one of which is disqualifying:
+
+1. **It may simply be against policy.** Research institutions commonly prohibit
+   auto-forwarding institutional mail to personal accounts. Salk and LJI both handle
+   sensitive research; an IT policy violation is a real professional risk, and "my AI
+   agent needed to read it" is not a defense anyone will accept.
+2. **It would route unpublished research into a personal Gmail.** The PEPMatch manuscript,
+   maintainer review threads, unreviewed Salk data. Roman already has a standing rule to
+   keep unpublished method details out of anything public-facing — this is the same rule,
+   and forwarding would quietly break it.
+3. **Blast radius.** Cairn reads untrusted input (email, web pages) while holding shell
+   access on a server. Piping his employers' mail through that is a materially bigger
+   security surface than piping his student mail through it.
+
+**What to do instead — in order:**
+
+- **Ask.** Salk IT and LJI IT: *"is auto-forwarding to a personal address permitted?"*
+  One email each. The answer decides everything.
+- **If forwarding is prohibited** (assume it is until told otherwise): leave the work
+  inboxes out of Cairn. Roman forwards *individual* important threads by hand when he
+  wants help with one. Lower coverage, zero risk, no policy exposure. **This is a fine
+  outcome** — it is not a failure of the system.
+- **If it's permitted**, still don't forward the whole inbox. Forward **only from named
+  senders** (Dan, Danish, Ivy, Eduard, Deepshika) via a server-side rule. Narrow beats
+  broad. Never forward anything with attachments containing unpublished data.
+
+**Salk is Outlook/Exchange**, so its rules live in Outlook (Settings → Mail → Forwarding,
+or an inbox Rule), not Gmail. Same policy question applies regardless of the mail system.
+
+### ✅ Do these two now — they're safe and they cover the failure that already burned him
+
+**#3 UCSD → primary Gmail.** This is the one that matters most and carries no policy
+problem: it's his own student mail, and **the housing bill and the drop deadline both sat
+unread in it.**
+
+**#2 second personal Gmail → primary Gmail.** Gmail-to-Gmail, trivial, no downside.
+
+Label each on arrival so Cairn can triage by source (`UCSD`, `personal-2`). Then Cairn can
+honestly say *"I've triaged your personal and school mail"* — which is a true statement,
+unlike "I've triaged your inbox."
+
+### The mechanics — forward into the one Cairn already reads
 
 **On mail.ucsd.edu:** ⚙️ → *See all settings* → **Forwarding and POP/IMAP** → *Add a
 forwarding address* → `romanyoung9981@gmail.com` → confirm the code Google sends →
 select **"Forward a copy of incoming mail to…"**, and set it to **keep UCSD's copy in
 the Inbox**.
 
-**On personal Gmail:** ⚙️ → *See all settings* → **Filters and Blocked Addresses** →
-*Create a new filter* → **To:** your `@ucsd.edu` address → *Create filter* → ✅ **Apply
-the label** → new label **`UCSD`** → ✅ **Never send it to Spam**.
+**On `romankryoung@gmail.com`** (second personal): same thing — ⚙️ → **Forwarding and
+POP/IMAP** → forward to `romanyoung9981@gmail.com`.
 
-Then tell Cairn the label name and it triages `label:UCSD` explicitly.
+**On the primary Gmail** (`romanyoung9981@gmail.com`), label each source so Cairn can
+triage by origin: ⚙️ → *See all settings* → **Filters and Blocked Addresses** → *Create a
+new filter* → **To:** `r5young@ucsd.edu` → *Create filter* → ✅ **Apply the label** → new
+label **`UCSD`** → ✅ **Never send it to Spam**. Repeat with **To:** `romankryoung@gmail.com`
+→ label **`personal-2`**.
+
+Then tell Cairn the label names, and it triages `label:UCSD` explicitly.
 
 - **Why this is right:** zero new auth, zero new attack surface, works headlessly *if
-  the existing connector does*, and gives one inbox to triage instead of N. It also
+  the existing connector does*, and gives one inbox to triage instead of five. It
   directly fixes the failure that actually burned Roman — the housing bill and the drop
   deadline both sat unread in UCSD mail.
 - **Cost:** Cairn can't *draft from* the UCSD address. Given the standing rule is
@@ -114,6 +168,18 @@ Then tell Cairn the label name and it triages `label:UCSD` explicitly.
 - **If UCSD blocks auto-forwarding** (some universities do): invert it. Personal Gmail →
   *Accounts and Import* → **Check mail from other accounts** (POP). Pulls UCSD mail in
   rather than pushing it out. Same end state.
+
+### ⚠️ The honesty rule that comes with all this
+
+Until every inbox is covered, **Cairn must never say "I triaged your inbox" or "nothing
+important came in."** It must name *which* inboxes it read. Right now that is **one of
+five**, and the four it can't see contain **every work email from Dan, Danish, Ivy, and
+Eduard** — i.e. the senders Roman misses most.
+
+Overstating coverage is the single most damaging thing this agent could do here, because
+Roman would stop checking himself, and the mail he'd stop checking is the mail that
+matters. Partial coverage stated honestly is useful. Partial coverage stated as total is
+worse than nothing.
 
 ### Option B — Add a second account to the claude.ai Gmail connector
 
