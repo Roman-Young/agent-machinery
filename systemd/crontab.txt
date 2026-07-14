@@ -1,0 +1,49 @@
+# ─── Cairn: the live schedule ────────────────────────────────────────────────
+# Install with:  crontab agent-machinery/systemd/crontab.txt
+# This file is the SOURCE OF TRUTH for the schedule. Edit here, then re-install.
+#
+# Scheduler: CRON. The systemd timers are installed but DISABLED.
+# ⚠️ NEVER RUN BOTH — every job would fire twice a day. install-timers.sh now refuses
+# if these cron lines exist.
+#
+# CRON_TZ is load-bearing: the server runs Etc/UTC. Without it, "30 7" means 07:30 UTC =
+# 00:30 Pacific, and the "morning" brief lands at half past midnight. It also tracks the
+# PDT/PST switch, so the schedule doesn't drift an hour twice a year.
+CRON_TZ=America/Los_Angeles
+
+# cron starts with a near-empty PATH. Without this line `claude` is simply NOT FOUND and
+# every job fails silently, every day, with no error anyone would ever see.
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/roman/.npm-global/bin
+SHELL=/bin/bash
+MAILTO=""
+
+# ── PHONE CHANNEL: survive a reboot ──────────────────────────────────────────
+# Paseo was started by hand and had no supervisor. A reboot killed it permanently,
+# leaving SSH as the only way back to the agent — the exact thing this system exists to
+# avoid. The watchdog never touches a healthy daemon; it only acts when one is missing,
+# and it pushes to the phone either way, so a failure is never silent.
+@reboot        sleep 30 && /home/roman/agent/agent-machinery/scripts/paseo-watchdog.sh --boot >> /home/roman/.agent-logs/paseo.log 2>&1
+*/10 * * * *   /home/roman/agent/agent-machinery/scripts/paseo-watchdog.sh >> /home/roman/.agent-logs/paseo.log 2>&1
+
+# ── THE DAILY AGENT ──────────────────────────────────────────────────────────
+# Journal at 01:45 (not 23:00): the deep-work block runs ~10pm-1am, so an earlier journal
+# would systematically miss the three most productive hours of the day.
+30 7 * * *     /home/roman/agent/agent-machinery/scripts/morning-brief.sh >> /home/roman/.agent-logs/cron.log 2>&1
+45 1 * * *     /home/roman/agent/agent-machinery/scripts/nightly-journal.sh >> /home/roman/.agent-logs/cron.log 2>&1
+
+# ── BACKUP ───────────────────────────────────────────────────────────────────
+# Runs AFTER the journal so the day's log is included. Was NEVER SCHEDULED until
+# 2026-07-14 — 25 commits and the entire memory layer sat on one box with a 2-day-stale
+# copy on GitHub. Includes a PII gate that refuses to push the PUBLIC repo if it detects
+# emails or IPs.
+15 2 * * *     /home/roman/agent/agent-machinery/scripts/backup-context.sh >> /home/roman/.agent-logs/backup.log 2>&1
+
+# ── WEEKLY SELF-AUDIT ────────────────────────────────────────────────────────
+# Catches permission drift, a dead scheduler, a broken connector, a stale backup —
+# BEFORE they cost a silent morning. Sunday 9am.
+0 9 * * 0      /home/roman/agent/agent-machinery/scripts/healthcheck.sh >> /home/roman/.agent-logs/health.log 2>&1
+
+# ── LOG ROTATION ─────────────────────────────────────────────────────────────
+# Logs grew unbounded until 2026-07-14 (paseo daemon.log hit 6.3MB in two days).
+0 4 * * 1      /usr/sbin/logrotate -s /home/roman/.agent-logs/logrotate.state /home/roman/agent/agent-machinery/scripts/logrotate.conf >> /home/roman/.agent-logs/cron.log 2>&1
+# ─────────────────────────────────────────────────────────────────────────────

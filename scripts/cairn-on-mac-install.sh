@@ -29,7 +29,7 @@
 # ══════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
 
-SERVER="${SERVER:-roman@46.224.54.65}"
+SERVER="${SERVER:-}"
 CAIRN_HOME="$HOME/cairn"
 
 # Working trees to push UP, so you can ask Cairn about uncommitted code from your phone.

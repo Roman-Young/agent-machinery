@@ -26,8 +26,12 @@ the foundation and needs no server.
 ## 3. Clone the two repos
 
 ```
-git clone git@github.com:YOURUSER/my-context.git ~/my-context
-git clone git@github.com:YOURUSER/agent-machinery.git ~/agent-machinery
+mkdir -p ~/agent && cd ~/agent
+git clone git@github.com:YOURUSER/my-context.git      # -> ~/agent/my-context
+git clone git@github.com:YOURUSER/agent-machinery.git  # -> ~/agent/agent-machinery
+
+# ⚠️ BOTH repos live INSIDE a single workspace dir (~/agent). The workspace must
+# contain both, or writes to the context repo hit permission friction on every run.
 cd ~/agent-machinery && cp example.env .env && $EDITOR .env
 ```
 
@@ -76,3 +80,21 @@ Ordered by stated value. Each earns its place only when the prior layer is solid
 
 MCP servers implied by the above, roughly in order: filesystem (built in),
 Google Calendar, Gmail, Canvas (custom/community MCP), then a task DB.
+
+
+## Scheduling — use CRON, not systemd
+
+systemd **user** timers only run while you have an active login session, unless
+`loginctl enable-linger` is set — which needs sudo. Cron needs neither.
+
+```bash
+crontab agent-machinery/systemd/crontab.txt
+```
+
+Two things silently kill a cron job, and both are handled in that file:
+- **`CRON_TZ`** — the server is almost certainly UTC. Without it, a "07:30" morning brief
+  fires at 00:30 local.
+- **`PATH`** — cron starts nearly empty. Without it, `claude` is simply *not found*, and
+  the job fails silently every day with no error anyone ever sees.
+
+**Never run cron and systemd timers together — every job would fire twice.**
