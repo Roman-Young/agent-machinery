@@ -198,11 +198,28 @@ for l in open(sys.argv[1], errors='ignore'):
 for P in $(discover_projects | tr '\n' '\v' | sed 's/\v/\n/g'); do :; done
 discover_projects | while IFS= read -r P; do
   REMOTE_NAME=$(basename "$P" | tr ' ' '-')
-  # -s (--protect-args): the REMOTE path is re-parsed by a shell on the server, so a
-  # space in "Cold Email Agent" would silently split into three arguments and the sync
-  # would fail with no error anyone ever sees.
-  rsync -azs --delete "${EX[@]}" "$P/" "$SERVER:~/agent/mac-mirror/$REMOTE_NAME/" 2>/dev/null \
-    && echo "  synced: $REMOTE_NAME" || echo "  FAILED: $REMOTE_NAME"
+
+  # ⚠️ NO -s / --protect-args, AND NO TILDE. Both were bugs, 2026-07-14:
+  #
+  # -s stops the REMOTE SHELL from interpreting the path — and tilde expansion IS remote
+  # shell interpretation. So "$SERVER:~/agent/mac-mirror/" became a request for a LITERAL
+  # directory named '~', and every project sync failed. It was added to protect against
+  # spaces in the remote path, which was ALREADY solved by sanitising REMOTE_NAME to
+  # dashes. Belt AND braces — and the belt strangled it.
+  #
+  # The remote path is now RELATIVE (no ~, no absolute path): rsync-over-ssh lands in
+  # $HOME by default, so this cannot depend on tilde expansion at all. It also keeps the
+  # server's real path out of a public repo.
+  #
+  # And the error is SHOWN, not swallowed. `2>/dev/null` is why the last run printed a
+  # bare "FAILED:" with no reason — a silent failure is the one thing this system is not
+  # allowed to do.
+  if ERR=$(rsync -az --delete "${EX[@]}" "$P/" "$SERVER:agent/mac-mirror/$REMOTE_NAME/" 2>&1); then
+    echo "  synced: $REMOTE_NAME"
+  else
+    echo "  FAILED: $REMOTE_NAME"
+    echo "$ERR" | head -3 | sed 's/^/          /'
+  fi
 done
 DISCOVER
   echo ''
