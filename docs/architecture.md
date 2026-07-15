@@ -141,31 +141,40 @@ built to be **correct even when its guess is wrong**:
 Two Cairns exist — one on the server, one in the laptop's editor. They **share files**; they
 do not talk.
 
+Two Cairns, a clean division of labour. **Simplified 2026-07-15: NO code crosses between
+them.** The server never needs your files — the code lives where you code (the Mac), and the
+server learns what you're doing from your *conversations*.
+
 ```
         MAC (VS Code)                          SERVER (Hetzner)
    ┌─────────────────────┐              ┌─────────────────────┐
-   │  Cairn              │              │  Cairn              │
+   │  Cairn — CODES      │              │  Cairn — KNOWS      │
    │  ~/.claude/CLAUDE.md│              │  agent-machinery/   │
    │                     │              │                     │
-   │  OWNS: code    ✍    │              │  OWNS: memory  ✍    │
-   │  reads: memory 👁    │              │  reads: code   👁    │
-   │                     │              │                     │
-   │  live/uncommitted   │              │  email, calendar,   │
-   │  files, the editor  │              │  cron, brief,       │
-   │                     │              │  journal, phone     │
+   │  your code (native) │              │  email, calendar,   │
+   │  + memory (synced   │              │  cron, brief,       │
+   │    DOWN)            │              │  journal, phone     │
    └──────────┬──────────┘              └──────────┬──────────┘
-              │   memory  ◀──── rsync ─────────────┤  (server → Mac, 5 min)
-              │   transcripts ──── rsync ─────────▶│  (Mac → server, 5 min)
-              │   code        ──── rsync ─────────▶│  (Mac → server, 5 min)
-              └────────────────────────────────────┘
+              │  memory       ◀──── rsync ─────────┤  DOWN: Cairn knows you in VS Code
+              │  transcripts  ──── rsync ─────────▶│  UP:   server knows your work
+              │  outbox       ──── rsync ─────────▶│  UP:   memory-change requests
+              │  backups      ◀──── rsync ─────────┤  DOWN: 3-2-1
+              └────────────────────────────────────┘   (all every 5 min, delta-only)
 ```
 
-- **The server owns memory.** The laptop's mirror is read-only, overwritten every 5 minutes.
-- **The laptop owns code.** The server's mirror is read-only; it proposes *diffs*.
+- **The server owns memory.** The Mac's copy is read-only, overwritten every 5 minutes.
+- **The Mac owns code.** It never leaves the Mac; the server doesn't try to read it.
+- **The server learns your work from your transcripts** → nightly journal → log. That's the
+  single channel by which "what Roman did in VS Code" becomes something the server knows.
 
-Two writers to one store means silent divergence, and a memory you cannot trust is worse than
-no memory at all. Learning from the laptop flows back through **transcripts → nightly journal
-→ log**: the loop still closes, it just closes through the single writer, on purpose.
+Why no code sync? Because once Cairn is IN VS Code, it has your files natively — mirroring
+them to the server was the server trying to do the editor's job. All the complexity that
+caused (project discovery, size caps, the 400MB prune saga) is gone. If the server ever
+needs published code, it fetches the public repo on demand (see `sync-repos.sh`, a small
+server-internal git pull for PR/paper reference only).
+
+Two writers to one store means silent divergence, so memory has exactly one writer (the
+server). VS Code Cairn *requests* changes via the outbox; it never writes memory directly.
 
 ### Rule 6: The template must not know the tenant.
 

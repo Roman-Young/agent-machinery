@@ -186,13 +186,14 @@ if [[ -d "$LO" ]]; then
 fi
 
 # Is the LAPTOP still talking to us? If it stops (lid shut for days, key expired,
-# network), Cairn keeps reading a frozen copy of his code and confidently advising on it.
-# Silent staleness is the most dangerous state this system has, because everything LOOKS fine.
+# network), the nightly journal stops seeing his VS Code conversations, so the log and
+# brief silently fall behind what he's actually working on. Everything LOOKS fine — which
+# is what makes it dangerous.
 if [[ -n "$MACLAST" ]]; then
   MACAGE=$(( ( $(date +%s) - ${MACLAST%.*} ) / 3600 ))
-  if   [[ $MACAGE -le 24 ]]; then ok "Mac synced ${MACAGE}h ago — your code and chats are current"
-  elif [[ $MACAGE -le 72 ]]; then warn "Mac hasn't synced in ${MACAGE}h — code/chats may be stale"
-  else bad "🔴 Mac hasn't synced in ${MACAGE}h — Cairn is reading STALE code and giving advice on it"
+  if   [[ $MACAGE -le 24 ]]; then ok "Mac synced ${MACAGE}h ago — your VS Code work is reaching the server"
+  elif [[ $MACAGE -le 72 ]]; then warn "Mac hasn't synced in ${MACAGE}h — your recent VS Code work may not be logged yet"
+  else bad "🔴 Mac hasn't synced in ${MACAGE}h — the server is NOT seeing your VS Code work; the brief is falling behind"
   fi
 else
   warn "no Mac-sync heartbeat yet — the Mac hasn't run the updated sync lib once; can't confirm it's syncing until it does"

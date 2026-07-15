@@ -5,13 +5,11 @@
 # ══════════════════════════════════════════════════════════════════════════════
 # WHAT THIS IS FOR — and, more importantly, what it is NOT for.
 #
-# There are TWO views of code, and they are complementary, not redundant:
-#   • mac-mirror/  — the LIVE WORKING TREE from the Mac (incl. uncommitted work), NO
-#                    git history. This is the PRIMARY source for helping Roman code.
-#   • codebases/   — the PUSHED state from GitHub: full history, all branches, what a
-#                    reviewer actually sees. Useful ONLY for a repo under active PR review.
-#
-# So this script should clone a SMALL, DELIBERATE set — not "every public repo I own."
+# codebases/ holds the PUSHED state of a SMALL set of repos (full git history + all
+# branches) so server-Cairn can reference what's actually merged/on a branch — useful for
+# PR and paper tracking on the flagship project. It is NOT a mirror of your working tree:
+# you code in VS Code, where Cairn has your files natively. Clone a DELIBERATE few, never
+# "every public repo I own."
 # Auto-discovering all of them (the old behaviour) re-cloned repos the Mac mirror already
 # provides, cloned agent-machinery onto its own server, and created "which copy am I
 # reading?" confusion. An audit on 2026-07-14 found 4 of 5 auto-discovered clones were
@@ -95,4 +93,4 @@ if [[ $CONFIGURED -eq 0 ]]; then
   done
 fi
 
-echo "Mirrored to $CODE_DIR  —  PUSHED state only; uncommitted work is in mac-mirror/."
+echo "Mirrored to $CODE_DIR  —  PUSHED state only (server-internal, for PR/paper reference)."

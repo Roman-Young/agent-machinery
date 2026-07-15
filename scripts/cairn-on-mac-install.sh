@@ -42,32 +42,10 @@ fi
 
 CAIRN_HOME="$HOME/cairn"
 
-# Working trees to push UP, so you can ask Cairn about uncommitted code from your phone.
-# Leave empty to skip. Editing this list and re-running is safe — it's idempotent.
-# ── PROJECT DISCOVERY — you should never have to edit this file again ─────────
-#
-# A hardcoded list means every new project needs an edit and a re-install. That is not a
-# system, it is a chore, and chores get skipped — after which Cairn is silently blind to
-# your newest work and nobody notices.
-#
-# So it DISCOVERS instead. Claude Code records the working directory of every session in
-# ~/.claude/projects/*/*.jsonl. Any folder where you have ever run `claude` is therefore
-# self-announcing. Start a new project, use Cairn in it once, and the next sync (≤5 min)
-# picks it up. Zero maintenance, forever.
-#
-# Guarded, because "sync everything the user ever cd'd into" is how you ship 40GB of
-# Downloads over a home connection:
-#   - must still exist
-#   - must live under $HOME
-#   - must LOOK like a project (.git / package.json / pyproject.toml / Cargo.toml / *.Rproj)
-#     -> this alone excludes ~/Downloads/filtered_gene_bc_matrices (a dataset, not code)
-#   - must not be a denied path (Downloads, Library, .Trash, the home dir itself)
-#   - capped at MAX_PROJECTS, so a runaway can't fill the server
-#
-# EXTRA_PROJECTS below is an escape hatch for anything that doesn't fit the heuristic.
-EXTRA_PROJECTS=()
-DENY_RE='/(Downloads|Library|Applications|\.Trash|node_modules|\.git)(/|$)'
-MAX_PROJECTS=12
+# NOTE: no project/code sync anymore (simplified 2026-07-15). Server-Cairn learns your
+# work from your VS Code CONVERSATIONS (transcripts), not from mirrored files — the code
+# lives where you code. This installer just sets up the memory mirror + the self-updating
+# sync bootstrap; the sync logic itself is scripts/mac-sync-lib.sh.
 
 echo "═══ Installing Cairn on this Mac ═══"
 echo "server: $SERVER"
