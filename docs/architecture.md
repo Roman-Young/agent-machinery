@@ -138,24 +138,24 @@ built to be **correct even when its guess is wrong**:
 
 ### Rule 5: One writer. Always.
 
-Two Cairns exist — one on the server, one in the laptop's editor. They **share files**; they
+Two Cairos exist — one on the server, one in the laptop's editor. They **share files**; they
 do not talk.
 
-Two Cairns, a clean division of labour. **Simplified 2026-07-15: NO code crosses between
+Two Cairos, a clean division of labour. **Simplified 2026-07-15: NO code crosses between
 them.** The server never needs your files — the code lives where you code (the Mac), and the
 server learns what you're doing from your *conversations*.
 
 ```
         MAC (VS Code)                          SERVER (Hetzner)
    ┌─────────────────────┐              ┌─────────────────────┐
-   │  Cairn — CODES      │              │  Cairn — KNOWS      │
+   │  Cairo — CODES      │              │  Cairo — KNOWS      │
    │  ~/.claude/CLAUDE.md│              │  agent-machinery/   │
    │                     │              │                     │
    │  your code (native) │              │  email, calendar,   │
    │  + memory (synced   │              │  cron, brief,       │
    │    DOWN)            │              │  journal, phone     │
    └──────────┬──────────┘              └──────────┬──────────┘
-              │  memory       ◀──── rsync ─────────┤  DOWN: Cairn knows you in VS Code
+              │  memory       ◀──── rsync ─────────┤  DOWN: Cairo knows you in VS Code
               │  transcripts  ──── rsync ─────────▶│  UP:   server knows your work
               │  outbox       ──── rsync ─────────▶│  UP:   memory-change requests
               │  backups      ◀──── rsync ─────────┤  DOWN: 3-2-1
@@ -167,14 +167,14 @@ server learns what you're doing from your *conversations*.
 - **The server learns your work from your transcripts** → nightly journal → log. That's the
   single channel by which "what Roman did in VS Code" becomes something the server knows.
 
-Why no code sync? Because once Cairn is IN VS Code, it has your files natively — mirroring
+Why no code sync? Because once Cairo is IN VS Code, it has your files natively — mirroring
 them to the server was the server trying to do the editor's job. All the complexity that
 caused (project discovery, size caps, the 400MB prune saga) is gone. If the server ever
 needs published code, it fetches the public repo on demand (see `sync-repos.sh`, a small
 server-internal git pull for PR/paper reference only).
 
 Two writers to one store means silent divergence, so memory has exactly one writer (the
-server). VS Code Cairn *requests* changes via the outbox; it never writes memory directly.
+server). VS Code Cairo *requests* changes via the outbox; it never writes memory directly.
 
 ### Rule 6: The template must not know the tenant.
 

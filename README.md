@@ -87,7 +87,7 @@ job can forget a guard:
 | `scripts/paseo-watchdog.sh` | Keeps the phone channel alive across reboots and crashes. |
 | `scripts/install-permissions.sh` | Renders the policy into the layer that actually applies. |
 | `scripts/sync-repos.sh` | Mirrors the owner's public repos so the agent can read code. |
-| `scripts/cairn-on-mac-install.sh` | Puts the agent **on the laptop**, in the editor. |
+| `scripts/cairo-on-mac-install.sh` | Puts the agent **on the laptop**, in the editor. |
 | `systemd/crontab.txt` | **The schedule. Source of truth.** `crontab systemd/crontab.txt` |
 | `docs/` | Permissions, integrations, architecture. |
 

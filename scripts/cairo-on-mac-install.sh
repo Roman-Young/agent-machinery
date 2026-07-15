@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# cairn-on-mac-install.sh — RUN THIS ON YOUR MAC, ONCE. It is the ONLY Mac installer.
+# cairo-on-mac-install.sh — RUN THIS ON YOUR MAC, ONCE. It is the ONLY Mac installer.
 #
 # ══════════════════════════════════════════════════════════════════════════════
 # WHAT IT DOES, IN ONE LINE:
-#   Makes the Claude Code on your Mac BE Cairn — and keeps it in sync with the server.
+#   Makes the Claude Code on your Mac BE Cairo — and keeps it in sync with the server.
 #
-# Cairn is not a program. It is a Claude Code session that has read your context files.
+# Cairo is not a program. It is a Claude Code session that has read your context files.
 # The Claude in your VS Code has never read them, so it doesn't know who you are. This
 # fixes that by putting the context ON the Mac and pointing every session at it.
 #
@@ -14,17 +14,17 @@
 # high-stakes for you, or that "unearned fluency is a liability" is your own thesis. It
 # just writes the Rust and hands it over. After this, it teaches instead.
 #
-# THERE IS NO LIVE CONNECTION between the two Cairns. They are not talking to each other.
+# THERE IS NO LIVE CONNECTION between the two Cairos. They are not talking to each other.
 # They SHARE FILES, synced every 5 minutes. That's the whole mechanism.
 #
-#   memory      server ──▶ Mac   (so Mac-Cairn knows you)
+#   memory      server ──▶ Mac   (so Mac-Cairo knows you)
 #   transcripts Mac    ──▶ server (so the nightly journal sees your VS Code work)
-#   code        Mac    ──▶ server (optional; so you can ask Cairn about uncommitted
+#   code        Mac    ──▶ server (optional; so you can ask Cairo about uncommitted
 #                                  code FROM YOUR PHONE)
 #
 # ⚠️ THE ONE-WRITER RULE — everything depends on it:
-#   The SERVER owns memory.  Mac-Cairn reads it, never writes it.
-#   The MAC owns code.       Server-Cairn reads it, never writes it.
+#   The SERVER owns memory.  Mac-Cairo reads it, never writes it.
+#   The MAC owns code.       Server-Cairo reads it, never writes it.
 #   Two writers to one memory = silent divergence = memory you can't trust = system dead.
 # ══════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
@@ -42,12 +42,12 @@ fi
 
 CAIRN_HOME="$HOME/cairn"
 
-# NOTE: no project/code sync anymore (simplified 2026-07-15). Server-Cairn learns your
+# NOTE: no project/code sync anymore (simplified 2026-07-15). Server-Cairo learns your
 # work from your VS Code CONVERSATIONS (transcripts), not from mirrored files — the code
 # lives where you code. This installer just sets up the memory mirror + the self-updating
 # sync bootstrap; the sync logic itself is scripts/mac-sync-lib.sh.
 
-echo "═══ Installing Cairn on this Mac ═══"
+echo "═══ Installing Cairo on this Mac ═══"
 echo "server: $SERVER"
 echo
 
@@ -121,7 +121,7 @@ mkdir -p "$HOME/.cairn" "$CAIRN_HOME"
 
 cat > "$HOME/.cairn/run.sh" <<BOOTSTRAP
 #!/usr/bin/env bash
-# Cairn sync bootstrap — STABLE. Pulls the latest sync logic and runs it.
+# Cairo sync bootstrap — STABLE. Pulls the latest sync logic and runs it.
 # Only SERVER/CAIRN_HOME are frozen here (they rarely change); the LOGIC self-updates.
 set -uo pipefail
 export SERVER="$SERVER"
@@ -155,7 +155,7 @@ echo "Running first sync (this may take a moment)..."
 "$HOME/.cairn/run.sh" || echo "  (first sync had a hiccup — the 5-min job will retry)"
 echo "✅ memory mirrored to $CAIRN_HOME/my-context"
 
-# ── 3. The bit that makes Mac-Claude into Cairn ───────────────────────────────
+# ── 3. The bit that makes Mac-Claude into Cairo ───────────────────────────────
 # ~/.claude/CLAUDE.md loads in EVERY Claude Code session on this Mac — every folder,
 # the VS Code extension panel, and the integrated terminal alike. All of them run
 # locally on the Mac, so all of them read this file.
@@ -165,7 +165,7 @@ mkdir -p "$HOME/.claude"
   echo "(backed up your existing ~/.claude/CLAUDE.md)"
 
 cat > "$HOME/.claude/CLAUDE.md" <<'MD'
-# You are Cairn.
+# You are Cairo.
 
 Roman's personal agent — the same agent that runs on his server. Same identity, same
 memory, same contract. You are simply running on his Mac, which means you can see his
@@ -259,7 +259,7 @@ GE courses: efficient help is fine.
 - **Never delete something you don't understand — flag it.**
 MD
 
-echo "✅ ~/.claude/CLAUDE.md installed — every Claude Code session on this Mac is now Cairn"
+echo "✅ ~/.claude/CLAUDE.md installed — every Claude Code session on this Mac is now Cairo"
 
 # ── 4. launchd: keep it fresh, survive reboots ────────────────────────────────
 PLIST="$HOME/Library/LaunchAgents/dev.cairn.sync.plist"
@@ -287,13 +287,13 @@ Done. Open VS Code, run \`claude\` in any project folder, and ask:
 
     "who am I?"
 
-If it knows about PEPMatch, Salk, and the 2-indel PR — Cairn is home.
+If it knows about PEPMatch, Salk, and the 2-indel PR — Cairo is home.
 
   memory mirror : $CAIRN_HOME/my-context   ← READ-ONLY. Never edit.
   backups       : $CAIRN_HOME/backups      ← the 2nd copy. This is what makes it a backup.
   identity      : ~/.claude/CLAUDE.md
   sync log      : tail ~/.cairn/sync.log
-  add projects  : NOTHING TO DO. Use Cairn in the folder once; it self-registers.
+  add projects  : NOTHING TO DO. Use Cairo in the folder once; it self-registers.
   uninstall     : launchctl unload $PLIST && rm ~/.claude/CLAUDE.md
 ═══════════════════════════════════════════════════════════════
 EOF

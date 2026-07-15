@@ -46,7 +46,7 @@ bad()  { echo "  ❌ $1"; FAIL=$((FAIL+1)); }
 warn() { echo "  ⚠️  $1"; WARN=$((WARN+1)); }
 hdr()  { echo; echo "─── $1"; }
 
-echo "═══ Cairn healthcheck — $(date '+%F %H:%M %Z') ═══"
+echo "═══ Cairo healthcheck — $(date '+%F %H:%M %Z') ═══"
 
 # Hoisted: used by BOTH recoverability (is the 2nd backup copy real?) and durability
 # (is the laptop still talking to us?).
@@ -241,12 +241,12 @@ grep -q 'PII' "$SCRIPT_DIR/backup-context.sh" \
 echo
 echo "═════════════════════════════════════════════"
 printf "  PASS %d   WARN %d   FAIL %d\n" "$PASS" "$WARN" "$FAIL"
-if [[ $FAIL -eq 0 && $WARN -eq 0 ]]; then echo "  ✅ Cairn is healthy on all five properties."
+if [[ $FAIL -eq 0 && $WARN -eq 0 ]]; then echo "  ✅ Cairo is healthy on all five properties."
 elif [[ $FAIL -eq 0 ]]; then                echo "  🟡 Working, with $WARN warning(s). Nothing is broken."
 else                                        echo "  ❌ $FAIL FAILURE(S). Do not trust the automation until fixed."
 fi
 echo "═════════════════════════════════════════════"
 
-[[ $FAIL -gt 0 ]] && "$SCRIPT_DIR/notify.sh" "❌ Cairn healthcheck: $FAIL failure(s)" \
+[[ $FAIL -gt 0 ]] && "$SCRIPT_DIR/notify.sh" "❌ Cairo healthcheck: $FAIL failure(s)" \
   "The weekly self-audit found $FAIL problem(s). Run scripts/healthcheck.sh on the server." >/dev/null 2>&1
 exit $(( FAIL > 0 ? 1 : 0 ))

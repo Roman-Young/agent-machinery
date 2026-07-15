@@ -52,7 +52,7 @@ otherwise is selling something.
 
 **2. The real boundary is the job allowlist — and this is what makes (1) safe.**
 
-Cairn reads **untrusted input**: email, web pages. Untrusted input plus shell access is the
+Cairo reads **untrusted input**: email, web pages. Untrusted input plus shell access is the
 whole prompt-injection threat model. The mitigation is that **the jobs which ingest
 untrusted content pass their own explicit `--allowedTools` that exclude Bash entirely.**
 
