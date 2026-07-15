@@ -29,8 +29,14 @@ EXTRA_PROJECTS=()   # escape hatch: folders that don't match the project heurist
 # Big build junk and datasets must never cross the wire.
 # --max-size=25m: keep CODE, skip DATA. A source file is essentially never >25MB; raw
 #   data (a 197MB TCGA matrix, a .bam, an .rds) is not something Cairn needs to READ.
-# --delete-excluded: also REMOVE already-mirrored files that now match an exclude, so a
-#   newly-added cap actually reclaims space instead of just skipping future copies.
+# --delete-excluded: REMOVE already-mirrored files that match an --exclude PATTERN
+#   (node_modules, venv, …) — this reclaims those correctly.
+#
+# ⚠️ BUT --delete-excluded does NOT reclaim files skipped by --max-size. A size-capped
+# file still EXISTS on the sender, so --delete won't remove the receiver's copy, and
+# --max-size is not an --exclude pattern so --delete-excluded ignores it. (My first fix
+# wrongly claimed it did; 400MB of TCGA data persisted in the mirror as a result.)
+# The real reclaim is the explicit prune AFTER the sync, below.
 EX=(--max-size=25m --delete-excluded
     --exclude '.git/objects' --exclude node_modules --exclude venv --exclude .venv
     --exclude target --exclude __pycache__ --exclude '*.pyc' --exclude .DS_Store
@@ -100,6 +106,13 @@ discover_projects 2>/dev/null | while IFS= read -r P; do
     echo "  FAILED: $REMOTE_NAME"; echo "$ERR" | head -3 | sed 's/^/          /'
   fi
 done
+
+# ── PRUNE: enforce "no file >25MB in the mirror", the invariant --max-size can't.
+#    --max-size stops NEW big files from transferring; this removes ones already there
+#    (and any that ever slip through). Self-healing: it asserts the end state rather than
+#    trusting rsync's delete semantics. Runs on the server, scoped to the mirror only, so
+#    it can never touch anything but oversized cache copies of data that lives on the Mac.
+ssh "$SERVER" "find agent/mac-mirror -type f -size +25M -delete" 2>/dev/null || true
 
 # ── UP: the OUTBOX. Mac-Cairn can't write memory (one-writer rule); it leaves requests
 #    here and the server applies them. Without this, a task added in VS Code goes nowhere.
