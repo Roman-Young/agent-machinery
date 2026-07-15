@@ -124,4 +124,10 @@ rsync -az "$HOME/cairn/outbox/" "$SERVER:mac-outbox/" 2>/dev/null || true
 mkdir -p "$HOME/cairn/backups"
 rsync -az "$SERVER:backups/" "$HOME/cairn/backups/" 2>/dev/null || true
 
+# ── HEARTBEAT: record WHEN THE SYNC ACTUALLY RAN, in server time.
+#    rsync -a preserves source mtimes, so file timestamps tell you when Roman last EDITED
+#    something — not when the Mac last synced. Detecting "the laptop stopped talking to us"
+#    needs a real heartbeat: a server-side file stamped with the current time each run.
+ssh "$SERVER" "mkdir -p ~/.agent-logs && date +%s > ~/.agent-logs/last-mac-sync" 2>/dev/null || true
+
 echo "$(date '+%F %T') cairn sync ok"

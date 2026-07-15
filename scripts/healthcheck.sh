@@ -49,9 +49,12 @@ hdr()  { echo; echo "─── $1"; }
 echo "═══ Cairn healthcheck — $(date '+%F %H:%M %Z') ═══"
 
 # Hoisted: used by BOTH recoverability (is the 2nd backup copy real?) and durability
-# (is the laptop still talking to us?). It was computed after its first use, so the
-# 3-2-1 check silently read an empty variable and warned when it should have passed.
-MACLAST=$(find "$HOME/mac-transcripts" "$HOME/agent/mac-mirror" -type f -printf '%T@\n' 2>/dev/null | sort -rn | head -1)
+# (is the laptop still talking to us?).
+# Read the HEARTBEAT, not file mtimes. rsync -a preserves source mtimes, so a file's
+# timestamp says when it was last EDITED, not when the Mac last synced — which would make
+# this check cry "stale!" whenever Roman simply hadn't touched a file for a few days.
+# mac-sync-lib.sh stamps ~/.agent-logs/last-mac-sync with the real sync time each run.
+MACLAST=$(cat "$HOME/.agent-logs/last-mac-sync" 2>/dev/null || echo "")
 
 # ── 1. LIVENESS ───────────────────────────────────────────────────────────────
 hdr "1. LIVENESS — does it work right now?"
@@ -192,7 +195,7 @@ if [[ -n "$MACLAST" ]]; then
   else bad "🔴 Mac hasn't synced in ${MACAGE}h — Cairn is reading STALE code and giving advice on it"
   fi
 else
-  warn "no Mac data at all — cairn-on-mac-install.sh not run?"
+  warn "no Mac-sync heartbeat yet — the Mac hasn't run the updated sync lib once; can't confirm it's syncing until it does"
 fi
 
 # ── 4. BOUNDEDNESS ────────────────────────────────────────────────────────────
