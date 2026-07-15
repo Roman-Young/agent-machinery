@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# process-outbox.sh — apply memory changes REQUESTED by Mac-Cairn.
+# process-outbox.sh — apply memory changes REQUESTED by Mac-Cairo.
 #
 # ══════════════════════════════════════════════════════════════════════════════
 # THE GAP THIS CLOSES
 #
-# Mac-Cairn cannot write memory — the mirror is read-only and overwritten every 5 minutes
+# Mac-Cairo cannot write memory — the mirror is read-only and overwritten every 5 minutes
 # (the one-writer rule; two writers = silent divergence = memory you can't trust).
 # And the nightly journal writes only to logs/, deliberately, so an unsupervised agent
 # can't mangle the to-do list at 1:45am.
@@ -15,7 +15,7 @@
 #
 # THE FIX: an OUTBOX, not a second writer.
 #
-#   Mac-Cairn APPENDS a request  →  ~/cairn/outbox/<timestamp>.md   (on the Mac)
+#   Mac-Cairo APPENDS a request  →  ~/cairn/outbox/<timestamp>.md   (on the Mac)
 #   rsync ships it up            →  ~/mac-outbox/                   (on the server)
 #   THIS script applies it       →  tasks.md / current.md / etc.
 #
@@ -59,7 +59,7 @@ export AGENT_TIMEOUT_SEC=300
 export PUSH_OUTPUT=0
 
 OUT=$("$SCRIPT_DIR/run-agent.sh" process-outbox \
-"You are Cairn on the server. Mac-Cairn (running in Roman's VS Code) could not write to
+"You are Cairo on the server. Mac-Cairo (running in Roman's VS Code) could not write to
 memory — that is by design, the server is the only writer — so it left these REQUESTS for
 you to apply.
 

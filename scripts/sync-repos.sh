@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# sync-repos.sh — mirror a FEW GitHub repos to the server so Cairn can read their
+# sync-repos.sh — mirror a FEW GitHub repos to the server so Cairo can read their
 # PUSHED state (full git history + all branches).
 #
 # ══════════════════════════════════════════════════════════════════════════════
 # WHAT THIS IS FOR — and, more importantly, what it is NOT for.
 #
 # codebases/ holds the PUSHED state of a SMALL set of repos (full git history + all
-# branches) so server-Cairn can reference what's actually merged/on a branch — useful for
+# branches) so server-Cairo can reference what's actually merged/on a branch — useful for
 # PR and paper tracking on the flagship project. It is NOT a mirror of your working tree:
-# you code in VS Code, where Cairn has your files natively. Clone a DELIBERATE few, never
+# you code in VS Code, where Cairo has your files natively. Clone a DELIBERATE few, never
 # "every public repo I own."
 # Auto-discovering all of them (the old behaviour) re-cloned repos the Mac mirror already
 # provides, cloned agent-machinery onto its own server, and created "which copy am I
