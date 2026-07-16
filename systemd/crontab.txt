@@ -40,6 +40,10 @@ S=/home/roman/agent/agent-machinery/scripts
 # before then would systematically miss the three most productive hours of the day.
 30 14,15 * * *  /home/roman/agent/agent-machinery/scripts/run-local.sh 07:30 /home/roman/agent/agent-machinery/scripts/morning-brief.sh   >> /home/roman/.agent-logs/cron.log 2>&1
 45 8,9   * * *  /home/roman/agent/agent-machinery/scripts/run-local.sh 01:45 /home/roman/agent/agent-machinery/scripts/nightly-journal.sh >> /home/roman/.agent-logs/cron.log 2>&1
+# ── STALENESS SWEEP — 02:00 local, after the journal. Strikes passed deadlines, marks
+#    overdue tasks, refreshes current.md, flags judgment calls. Conservative: never deletes,
+#    never guesses, commits everything (reversible), pushes a summary to the phone.
+0 9,10   * * *  /home/roman/agent/agent-machinery/scripts/run-local.sh 02:00 /home/roman/agent/agent-machinery/scripts/nightly-maintenance.sh >> /home/roman/.agent-logs/cron.log 2>&1
 
 # ── BACKUP (runs AFTER the journal so the day's log is included) ─────────────
 # Was NEVER SCHEDULED until 2026-07-14: 25 commits and the entire memory layer sat on one
