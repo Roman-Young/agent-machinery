@@ -27,7 +27,10 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 # shellcheck disable=SC1091
 source "$REPO_DIR/.env"
 
-notify() { "$SCRIPT_DIR/notify.sh" "$1" "$2" >/dev/null 2>&1 || true; }
+# Both notify() calls in this script are failures (PII gate tripped / push failed) —
+# always alert-tier, never fyi. If a routine success push is ever added here, call
+# notify.sh directly with "fyi" instead of adding a tier param to this helper.
+notify() { "$SCRIPT_DIR/notify.sh" alert "$1" "$2" >/dev/null 2>&1 || true; }
 FAILED=0
 
 # ── 1. THE PII GATE — this runs BEFORE any push to the public repo ────────────

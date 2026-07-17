@@ -67,12 +67,19 @@ REQUESTS:
 $REQUESTS
 
 Apply each one to the right file, following the existing conventions exactly:
-- A new task  -> tasks.md. Assign the NEXT FREE ID from the header and update the counter.
-                 Put it in the right section. Give it a stake, not just an imperative.
-- A completed task -> move it to Done, strike it through, stamp today's date. NEVER delete.
+- A new task  -> tasks.yaml, under 'tasks:'. Assign the NEXT FREE ID from meta.next_id
+                 and increment it. Classify domain (work/school/personal/other) and
+                 urgency (red/yellow/green) as best you can. Give it a stake in 'notes',
+                 not just an imperative.
+- A completed task -> move its entry from 'tasks:' to 'done:' in tasks.yaml, set
+                 done_date to today, TRIM notes to a short summary (the full story
+                 belongs in today's log, not duplicated in tasks.yaml). NEVER delete it.
 - A decision / project-state change -> the relevant projects-*.md or current.md.
 - A recurring pattern worth keeping -> recommend it for insights.md, but do NOT edit
   insights.md yourself. Recommend only.
+- If tasks.yaml changed AT ALL, run this to regenerate tasks.md (it is a generated
+  view — never hand-edit tasks.md directly, it will be silently overwritten):
+    python3 \"$REPO_DIR/scripts/render-tasks.py\" \"\$CONTEXT_DIR/tasks.yaml\"
 
 RULES:
 - If a request is ambiguous, DO NOT GUESS. Write it into today's log under
@@ -86,7 +93,7 @@ RC=$?
 if [[ $RC -eq 0 ]]; then
   for f in "${PENDING[@]}"; do basename "$f" >> "$LEDGER"; done
   echo "$OUT"
-  "$SCRIPT_DIR/notify.sh" "📥 Applied ${#PENDING[@]} request(s) from VS Code" "$OUT" >/dev/null 2>&1 || true
+  "$SCRIPT_DIR/notify.sh" fyi "📥 Applied ${#PENDING[@]} request(s) from VS Code" "$OUT" >/dev/null 2>&1 || true
 else
   # Do NOT mark as processed — a failed apply must be retried, never silently dropped.
   echo "$(date -Is) outbox: FAILED (rc=$RC) — requests left pending for the next run"

@@ -50,12 +50,12 @@ sleep 6
 # ── 4. Report honestly. This is the part that makes the whole thing safe. ─────
 if daemon_up; then
   echo "$(date -Is) paseo: restarted OK"
-  "$SCRIPT_DIR/notify.sh" "✅ Paseo is back" \
+  "$SCRIPT_DIR/notify.sh" fyi "✅ Paseo is back" \
     "The server rebooted or Paseo crashed, and the watchdog restarted it. Your phone channel to Cairo is live again." \
     >/dev/null 2>&1 || true
 else
   echo "$(date -Is) paseo: RESTART FAILED"
-  "$SCRIPT_DIR/notify.sh" "🔴 PASEO IS DOWN — action needed" \
+  "$SCRIPT_DIR/notify.sh" alert "🔴 PASEO IS DOWN — action needed" \
 "The watchdog could not restart Paseo, so your phone channel to Cairo is dead.
 
 SSH in to the server and run:
