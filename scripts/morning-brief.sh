@@ -73,9 +73,9 @@ Be specific and blunt. No pleasantries. Do not modify any files.")
 
 # ── The check. A brief we can't trust is not sent as a brief. ────────────────
 if grep -qi 'gmail=ok' <<<"$OUT"; then
-  "$SCRIPT_DIR/notify.sh" "☀️ Morning brief" "$OUT"
+  "$SCRIPT_DIR/notify.sh" fyi "☀️ Morning brief" "$OUT"
 else
-  "$SCRIPT_DIR/notify.sh" "⚠️ BRIEF DEGRADED — Gmail unreachable" \
+  "$SCRIPT_DIR/notify.sh" alert "⚠️ BRIEF DEGRADED — Gmail unreachable" \
 "The morning brief could NOT read your email. Do not trust it as complete.
 Check your inbox yourself today.
 

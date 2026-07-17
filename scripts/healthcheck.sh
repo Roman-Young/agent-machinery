@@ -63,6 +63,10 @@ hdr "1. LIVENESS — does it work right now?"
 for V in CONTEXT_DIR NTFY_URL NTFY_TOPIC; do
   [[ -n "${!V:-}" ]] && ok "$V set" || bad "$V not set in .env"
 done
+# NTFY_TOPIC_FYI is OPTIONAL (2026-07-17 two-tier split) — fyi pushes fall back to the
+# alert topic if unset, so this is a WARN (worth doing) not a FAIL (nothing is broken).
+[[ -n "${NTFY_TOPIC_FYI:-}" ]] && ok "NTFY_TOPIC_FYI set (fyi/alert tiers are separated)" \
+  || warn "NTFY_TOPIC_FYI not set — all pushes still land on the alert topic (works, just not separated)"
 
 crontab -l 2>/dev/null | grep -q morning-brief   && ok "cron: morning brief"   || bad "cron: morning brief NOT scheduled"
 crontab -l 2>/dev/null | grep -q nightly-journal && ok "cron: nightly journal" || bad "cron: nightly journal NOT scheduled"
@@ -113,6 +117,27 @@ while read -r P; do
                 || bad "CRON POINTS AT A NONEXISTENT PATH: $P"
 done < <(crontab -l 2>/dev/null | grep -oE '/home/[^ ]*\.sh' | sort -u)
 
+# tasks.md is a GENERATED VIEW of tasks.yaml (2026-07-17). If it's ever hand-edited or a
+# render step got skipped, it silently drifts from the source of truth and Roman starts
+# reading a stale list. Prove it's current by re-rendering to a scratch file and diffing —
+# the same "verify the actual operation" rule this whole healthcheck runs on.
+if [[ -f "$CTX/tasks.yaml" ]]; then
+  TMP_RENDER=$(mktemp -d)
+  if python3 "$SCRIPT_DIR/render-tasks.py" "$TMP_RENDER/tasks.yaml" 2>/dev/null \
+       || { cp "$CTX/tasks.yaml" "$TMP_RENDER/tasks.yaml" && python3 "$SCRIPT_DIR/render-tasks.py" "$TMP_RENDER/tasks.yaml" 2>/dev/null; }; then
+    # Ignore the "Rendered: <date>" timestamp line — that's expected to differ.
+    if diff -q <(grep -v '^Rendered:' "$CTX/tasks.md" 2>/dev/null) \
+               <(grep -v '^Rendered:' "$TMP_RENDER/tasks.md" 2>/dev/null) >/dev/null 2>&1; then
+      ok "tasks.md matches tasks.yaml (not stale, not hand-edited)"
+    else
+      bad "🔴 tasks.md is OUT OF SYNC with tasks.yaml — run render-tasks.py"
+    fi
+  else
+    bad "render-tasks.py failed to run — tasks.yaml may be malformed"
+  fi
+  rm -rf "$TMP_RENDER"
+fi
+
 grep -q '"Bash"' "$HOME/.claude/settings.json" 2>/dev/null \
   && ok "permission policy installed at the user level (the only layer that applies)" \
   || bad "policy stale — run scripts/install-permissions.sh"
@@ -130,7 +155,7 @@ G=$(cd "${WORKSPACE_DIR:-$HOME/agent}" && timeout 120 claude -p \
 [[ "$G" =~ [0-9] ]] && ok "headless Gmail OK ($G threads) — the brief can see your mail" \
                     || bad "HEADLESS GMAIL UNREACHABLE — the brief would be BLIND. Got: '$G'"
 
-"$SCRIPT_DIR/notify.sh" "🩺 healthcheck" "Ran $(date '+%H:%M %Z')." >/dev/null 2>&1 \
+"$SCRIPT_DIR/notify.sh" fyi "🩺 healthcheck" "Ran $(date '+%H:%M %Z')." >/dev/null 2>&1 \
   && ok "ntfy accepted the push" || bad "ntfy FAILED — the agent cannot reach you"
 
 # ── 2. DURABILITY ─────────────────────────────────────────────────────────────
@@ -247,6 +272,6 @@ else                                        echo "  ❌ $FAIL FAILURE(S). Do not
 fi
 echo "═════════════════════════════════════════════"
 
-[[ $FAIL -gt 0 ]] && "$SCRIPT_DIR/notify.sh" "❌ Cairo healthcheck: $FAIL failure(s)" \
+[[ $FAIL -gt 0 ]] && "$SCRIPT_DIR/notify.sh" alert "❌ Cairo healthcheck: $FAIL failure(s)" \
   "The weekly self-audit found $FAIL problem(s). Run scripts/healthcheck.sh on the server." >/dev/null 2>&1
 exit $(( FAIL > 0 ? 1 : 0 ))

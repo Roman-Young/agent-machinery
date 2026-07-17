@@ -59,7 +59,11 @@ STATE_DIR="$LOG_DIR/state"
 mkdir -p "$LOG_DIR" "$STATE_DIR"
 LOG_FILE="$LOG_DIR/$(date +%F)-$JOB_NAME.log"
 
-notify() { "$SCRIPT_DIR/notify.sh" "$1" "$2" >/dev/null 2>&1 || true; }
+# All the guard-triggered notifies below (circuit breaker, skip, timeout, failure) are
+# things going WRONG — always alert-tier. The one exception is the generic PUSH_OUTPUT
+# success path further down, which gets its own tier (defaults fyi — "job completed
+# successfully" is routine, not an alert).
+notify() { "$SCRIPT_DIR/notify.sh" alert "$1" "$2" >/dev/null 2>&1 || true; }
 
 # ── GUARD 3: CIRCUIT BREAKER ──────────────────────────────────────────────────
 # Runs per job per day. If a job fires far more often than its schedule allows,
@@ -138,7 +142,9 @@ echo "[$(date -Is)] job=$JOB_NAME ok (${ELAPSED}s)" >> "$LOG_FILE"
 # captured an empty string, and the brief's coverage check cried DEGRADED on a good brief.)
 echo "$OUTPUT"
 
-# Jobs that want their output pushed verbatim, without inspection:
+# Jobs that want their output pushed verbatim, without inspection. Routine by default
+# (fyi) — a job succeeding is not an alert. Set PUSH_OUTPUT_TIER=alert per-job if a
+# future job's routine output genuinely needs the loud channel.
 if [[ "${PUSH_OUTPUT:-0}" == "1" ]]; then
-  notify "$JOB_NAME" "$OUTPUT"
+  "$SCRIPT_DIR/notify.sh" "${PUSH_OUTPUT_TIER:-fyi}" "$JOB_NAME" "$OUTPUT" >/dev/null 2>&1 || true
 fi

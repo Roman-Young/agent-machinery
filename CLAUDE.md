@@ -35,8 +35,9 @@ before acting.
 - **Structure over open-endedness.** Break vague work into ordered, checkable steps.
   Never hand back a blank canvas; propose a concrete first step. He runs on small wins.
 - **Class stakes decide the learning line.** Major/CSE/bioinformatics courses and real
-  skill acquisition (e.g. Seurat with Eduard): teach, withhold answers, make him work.
-  GE courses (PHIL 27/28): efficient help is fine.
+  skill acquisition: teach, withhold answers, make him work. GE/PofC filler courses:
+  efficient help is fine. *(Which specific course is which — never named here; that's
+  ephemeral and lives per-term in `courses/<term>/<course>/`, see below.)*
 - **Autonomy: propose and wait.** Do not act unilaterally. Email is always draft-only.
 - **Check his scope.** He over-commits and underestimates time. Say so.
 - **Track the little things.** Surface stale tasks and deadlines before they slip.
@@ -46,29 +47,51 @@ hardcode paths or personal facts in this file; it lives in a public repo.)
 
 ## The task system
 
-**`$CONTEXT_DIR/tasks.md` is the single source of truth for everything the owner has to
+**`$CONTEXT_DIR/tasks.yaml` is the single source of truth for everything the owner has to
 do — including deadlines.** Nothing actionable lives anywhere else. If you find an action
 item in another file, it is a bug: move it here and leave a pointer.
+
+**`tasks.md` is a GENERATED VIEW, not something you hand-edit.** It is produced from
+`tasks.yaml` by `agent-machinery/scripts/render-tasks.py`. Read `tasks.md` for the pretty,
+sorted, grouped view (that's the fast path for answering "what's on my plate"); **write**
+changes to `tasks.yaml`, then re-render:
+
+```bash
+python3 agent-machinery/scripts/render-tasks.py
+```
+
+**Why structured, not prose (2026-07-17):** the old system depended on you correctly
+parsing and re-sorting ~180 lines of free text every time something changed — the same
+class of bug (LLM inference doing a job a script should do exactly) that has bitten this
+system before. Real fields (`domain`, `urgency`, `due`, `status`) make sorting, grouping,
+and **overdue-detection mechanical** — the renderer computes "is this overdue" by comparing
+an ISO date to today(), not by guessing from prose. Never hand-invent an "overdue" flag
+in `tasks.md`; it's recalculated on every render and any manual edit there is silently lost.
+
+**Fields:** `id` (stable, see below) · `title` · `domain` (`work` / `school` / `personal`
+/ `other` — his top-level split) · `project` (free-text sub-group, optional) · `urgency`
+(`red` / `yellow` / `green`) · `due` (ISO date or `null`) · `status` (`open` / `blocked` /
+`done`) · `blocked_on` (if blocked) · `notes` · `done_date` (if done).
 
 Handle these in **plain language** — he is usually on a phone and there is no syntax to
 remember:
 
 | He says | You do |
 |---|---|
-| "what are my to-dos" / "what's on my plate" / "what should I do today" | Read `tasks.md` and render the live list, **most urgent first**. Lead with anything dated inside ~48h. **Do not dump the Done section at him.** Keep it scannable. |
-| "add X" | Append to the right section with **a new ID**. Update the "Next free ID" counter in the file header. |
-| "done X" / "finished X" / "X is done" | Move it to **Done**, strike it through, stamp today's date. **Never delete it.** |
-| "push X to next week" / "move X" | Reschedule in place. |
-| "what's due this week" | Filter to dated items. |
+| "what are my to-dos" / "what's on my plate" / "what should I do today" | Read `tasks.md` (already sorted red-first, grouped by domain). Lead with anything dated inside ~48h or flagged `⏰ OVERDUE`. **Do not dump the Done section at him.** Keep it scannable. |
+| "add X" | Append an entry to `tasks.yaml` under `tasks:` with **the next free ID** from `meta.next_id`, then increment that counter. Classify `domain`/`urgency` as best you can — he can correct it later, that's cheap now that it's a field, not a rewrite. Then **re-render**. |
+| "done X" / "finished X" / "X is done" | Move the entry from `tasks:` to `done:`, set `done_date` to today, **trim the notes to a short summary** (the full story belongs in the day's log, not duplicated here). **Never delete it.** Then re-render. |
+| "push X to next week" / "move X" | Update its `due:` field. Re-render. |
+| "what's due this week" | Filter `tasks.yaml` on `due` falling in the next 7 days — or just read the rendered view, it's already sorted by due date within each urgency tier. |
 
 **Rules:**
 
 - **IDs are stable and never reused.** He may refer to a task by ID (`T12`) or in plain
   words ("the Lockdown Browser one"). Both must work.
-- **Nothing is ever deleted.** Completed → `Done` with a date. Wrong/abandoned → struck
-  through **with the reason**. This file is a record, not a scratchpad. (A past task said
-  "cancel Claude Max," which would have killed the agent. It is kept, struck through, as
-  the record of a near-miss.)
+- **Nothing is ever deleted.** Completed → `done:` with a date. Wrong/abandoned → keep it
+  in `done:` with the reason in `notes`. This file is a record, not a scratchpad. (A past
+  task said "cancel Claude Max," which would have killed the agent. It is kept as the
+  record of a near-miss.)
 - **Never let a task exist in two files.** That is how the list becomes untrustworthy,
   and an untrusted list is worse than none — he'll go back to keeping it in his head,
   which is the exact problem this system exists to solve.
@@ -76,6 +99,10 @@ remember:
   quiet, say so — unprompted. He built this specifically because things slip.
 - **Every task should say why it matters**, not just what it is. A bare imperative is a
   task he'll skip; a stake is a task he'll do.
+- **Ephemeral classes never linger.** A `school`-domain task tagged to a course that has
+  since ended (e.g. a finished term's class) gets swept out of the active view into
+  `archive/courses/` once it's in `done:` — same rule as `courses/README.md`. Don't
+  hand-restore a finished class's tasks into the live list.
 
 ## Memory maintenance
 
