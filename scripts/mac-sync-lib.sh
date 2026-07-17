@@ -31,6 +31,20 @@ CAIRN_HOME="${CAIRN_HOME:-$HOME/cairn}"
 
 ssh "$SERVER" "mkdir -p ~/mac-transcripts ~/mac-outbox ~/.agent-logs" 2>/dev/null
 
+# ── DOWN: IDENTITY. ~/.claude/CLAUDE.md loads in every Claude Code session on this Mac,
+# and it used to be written ONCE at install time — a static snapshot. When Roman renamed
+# the agent Cairn -> Cairo (2026-07-15), the server-side files updated instantly but his
+# Mac kept saying "Cairn" for two days, because nothing ever re-pulled this file. Fixed by
+# giving it the same self-update treatment as the sync logic itself: pull fresh, validate
+# non-empty before adopting (a failed/empty pull must never blank out a working identity),
+# keep last-known-good on any failure.
+if rsync -az "$SERVER:agent/agent-machinery/scripts/mac-identity.md" "$HOME/.claude/CLAUDE.md.new" 2>/dev/null \
+   && [ -s "$HOME/.claude/CLAUDE.md.new" ]; then
+  mv "$HOME/.claude/CLAUDE.md.new" "$HOME/.claude/CLAUDE.md"
+else
+  rm -f "$HOME/.claude/CLAUDE.md.new" 2>/dev/null || true
+fi
+
 # ── DOWN: memory. --delete so a file removed on the server disappears here too, instead
 #    of VS Code Cairo reading a ghost. local-only/ deliberately stays server-side.
 rsync -az --delete --exclude '.git' --exclude 'local-only' \
