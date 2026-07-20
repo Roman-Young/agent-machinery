@@ -50,6 +50,10 @@ THEN CHECK, in this order:
    ⚠️ me.md records that only SOME of his inboxes are visible to you. Never claim to
    have 'checked his email' — say which inbox you actually read.
 2. Google Calendar: today's events.
+3. Triage backlog. Search Gmail 'label:triage/reply newer_than:3d' and
+   'label:triage/action newer_than:3d' — these were sorted by the hourly triage job and
+   are what needs a REPLY or an ACTION from Roman but wasn't urgent. List them so they
+   don't slip. If a search returns nothing, just say so; do not invent items.
 
 OUTPUT FORMAT — obey exactly:
 
@@ -61,9 +65,11 @@ denied, blocked, or errored, that is FAIL. Never guess. Never write 'ok' to be
 agreeable — a false ok is the worst possible outcome, because Roman will trust it
 and stop checking himself.
 
-Then, after the coverage line, 4-7 SHORT plain-text lines, no markdown:
+Then, after the coverage line, SHORT plain-text lines, no markdown:
 - Anything DUE today or tomorrow (from tasks.md)
 - New email that actually matters (name the sender; skip all retail/newsletter spam)
+- REPLY/ACTION backlog from triage labels: a short list of who's waiting on a reply and
+  what actions are pending (from step 3). Omit the line entirely if both are empty.
 - Today's calendar, if anything
 - The single most important thing to do today
 - One open loop going stale, if any

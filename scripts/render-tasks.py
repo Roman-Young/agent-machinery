@@ -16,6 +16,7 @@ Usage:
 import sys
 import os
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import yaml
 
@@ -31,9 +32,14 @@ DOMAIN_LABEL = {
 
 
 def today():
-    # Never Date.now()-style implicit "now" scattered through the script — one
-    # call site, so a future change (e.g. timezone) only needs to happen once.
-    return date.today()
+    # ONE call site for "now" (the whole reason this is a function). Roman is
+    # Pacific; the server is UTC — so date.today() returns the SERVER's day, which
+    # rolls to tomorrow at ~5pm Pacific and would flag a task due *today* as OVERDUE
+    # a full day early. Compute the date in the owner's zone instead. (Caught
+    # 2026-07-19: a card due that night read OVERDUE at 6:25pm PDT because UTC had
+    # already crossed into the 20th.)
+    tz = ZoneInfo(os.environ.get("OWNER_TZ", "America/Los_Angeles"))
+    return datetime.now(tz).date()
 
 
 def parse_due(due_str):

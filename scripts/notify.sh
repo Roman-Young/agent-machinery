@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# notify.sh — push a notification to Roman's phone via ntfy. TWO TIERS (2026-07-17).
+# notify.sh — push a notification to Roman's phone via ntfy. THREE TIERS (2026-07-20).
 #
-# Usage: notify.sh <alert|fyi> <title> <message>
+# Usage: notify.sh <urgent|alert|fyi> <title> <message>
 #        notify.sh <title> <message>            (old 2-arg form — defaults to "alert")
 #
 # ══════════════════════════════════════════════════════════════════════════════
@@ -11,13 +11,16 @@
 # backup failed" and "task added, here's a confirmation" buzzed the phone identically.
 # Roman asked for this to stay lean, so:
 #
+#   urgent (NTFY_TOPIC_URGENT) — a live email that needs Roman NOW: a job/recruiter reply,
+#                             a money/housing deadline, a person waiting on a time-bound
+#                             answer. Set this to MAX priority (sound + pop-up) on the phone.
 #   alert (NTFY_TOPIC)      — needs attention: something broken, overdue, or a real
 #                             decision. Set this to buzz/alert on the phone.
 #   fyi   (NTFY_TOPIC_FYI)  — routine: the daily brief, a task-added confirmation, a
 #                             passing weekly healthcheck. Set this to silent/badge-only.
 #
-# NTFY_TOPIC_FYI is OPTIONAL. If it isn't set, fyi-tier pushes fall back to the alert
-# topic — so nothing is ever silently dropped just because the second topic hasn't been
+# NTFY_TOPIC_FYI and NTFY_TOPIC_URGENT are OPTIONAL. If unset, that tier's pushes fall back
+# to the alert topic — so nothing is ever silently dropped just because a topic hasn't been
 # created yet. Standalone (not just a function inside run-agent.sh) so any script, and
 # Roman himself from the shell, can push, and the ntfy config is verified in ONE place.
 # ══════════════════════════════════════════════════════════════════════════════
@@ -31,11 +34,11 @@ if [[ -f "$REPO_DIR/.env" ]]; then
 fi
 
 # Detect old 2-arg form (title, message) vs new 3-arg form (tier, title, message).
-if [[ "${1:-}" == "alert" || "${1:-}" == "fyi" ]]; then
-  TIER="$1"; TITLE="${2:?usage: notify.sh [alert|fyi] <title> <message>}"; MESSAGE="${3:?usage: notify.sh [alert|fyi] <title> <message>}"
+if [[ "${1:-}" == "urgent" || "${1:-}" == "alert" || "${1:-}" == "fyi" ]]; then
+  TIER="$1"; TITLE="${2:?usage: notify.sh [urgent|alert|fyi] <title> <message>}"; MESSAGE="${3:?usage: notify.sh [urgent|alert|fyi] <title> <message>}"
 else
   TIER="alert"   # safe default: an un-migrated call site stays visible, never silently demoted
-  TITLE="${1:?usage: notify.sh [alert|fyi] <title> <message>}"; MESSAGE="${2:?usage: notify.sh [alert|fyi] <title> <message>}"
+  TITLE="${1:?usage: notify.sh [urgent|alert|fyi] <title> <message>}"; MESSAGE="${2:?usage: notify.sh [urgent|alert|fyi] <title> <message>}"
 fi
 
 if [[ -z "${NTFY_URL:-}" || -z "${NTFY_TOPIC:-}" ]]; then
@@ -44,7 +47,8 @@ if [[ -z "${NTFY_URL:-}" || -z "${NTFY_TOPIC:-}" ]]; then
 fi
 
 TOPIC="$NTFY_TOPIC"
-[[ "$TIER" == "fyi" && -n "${NTFY_TOPIC_FYI:-}" ]] && TOPIC="$NTFY_TOPIC_FYI"
+[[ "$TIER" == "fyi"    && -n "${NTFY_TOPIC_FYI:-}"    ]] && TOPIC="$NTFY_TOPIC_FYI"
+[[ "$TIER" == "urgent" && -n "${NTFY_TOPIC_URGENT:-}" ]] && TOPIC="$NTFY_TOPIC_URGENT"
 
 # --fail so a non-2xx is an error, not a silent success.
 if curl -fsS \
