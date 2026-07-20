@@ -92,6 +92,14 @@ fi
 BACKUP_DIR="${BACKUP_DIR:-$HOME/backups}"
 mkdir -p "$BACKUP_DIR"
 if [[ -d "$CONTEXT_DIR/local-only" ]]; then
+  # Consistent snapshot of the message bus FIRST, so the tarball captures a coherent DB.
+  # A live SQLite file mid-write would tar torn; VACUUM INTO writes a clean copy. No-op if
+  # the bus was never initialized. (No sqlite3 CLI on the box — bus.py does it in Python.)
+  BUS_DB="${BUS_DB:-$CONTEXT_DIR/local-only/agent_bus.db}"
+  if [[ -f "$BUS_DB" ]]; then
+    python3 "$SCRIPT_DIR/bus.py" snapshot "$CONTEXT_DIR/local-only/agent_bus.snapshot.db" >/dev/null 2>&1 \
+      && echo "✅ bus snapshot refreshed" || { echo "⚠️  bus snapshot FAILED"; FAILED=1; }
+  fi
   tar czf "$BACKUP_DIR/local-only-$(date +%F).tar.gz" -C "$CONTEXT_DIR" local-only 2>/dev/null \
     && echo "✅ local-only snapshot -> $BACKUP_DIR" \
     || { echo "🔴 local-only tarball FAILED"; FAILED=1; }

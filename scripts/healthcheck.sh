@@ -39,6 +39,7 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 # shellcheck disable=SC1091
 [[ -f "$REPO_DIR/.env" ]] && { set +u; source "$REPO_DIR/.env"; set -u; }
 CTX="${CONTEXT_DIR:-$HOME/agent/my-context}"
+BUS_DB="${BUS_DB:-$CTX/local-only/agent_bus.db}"
 
 PASS=0; FAIL=0; WARN=0
 ok()   { echo "  ✅ $1"; PASS=$((PASS+1)); }
@@ -158,6 +159,26 @@ G=$(cd "${WORKSPACE_DIR:-$HOME/agent}" && timeout 120 claude -p \
 "$SCRIPT_DIR/notify.sh" fyi "🩺 healthcheck" "Ran $(date '+%H:%M %Z')." >/dev/null 2>&1 \
   && ok "ntfy accepted the push" || bad "ntfy FAILED — the agent cannot reach you"
 
+# The message bus (scripts/bus.py). Prove the OPERATION, not the file: round-trip a
+# spawn->write->read against a SCRATCH DB (same "render to scratch" discipline as the
+# tasks.md check above) so the healthcheck never pollutes the real bus.
+if [[ -f "$BUS_DB" ]]; then
+  python3 -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); integ=c.execute('PRAGMA integrity_check').fetchone()[0]; t=[r[0] for r in c.execute(\"SELECT name FROM sqlite_master WHERE type='table'\")]; sys.exit(0 if integ=='ok' and 'threads' in t and 'messages' in t else 1)" "$BUS_DB" 2>/dev/null \
+    && ok "bus DB opens, schema present, integrity ok" \
+    || bad "bus DB present but CORRUPT or schema missing"
+  BUS_SCRATCH=$(mktemp -d)
+  ( export BUS_DB="$BUS_SCRATCH/b.db"
+    python3 "$SCRIPT_DIR/bus.py" init >/dev/null 2>&1 \
+    && TID=$(python3 "$SCRIPT_DIR/bus.py" spawn --title hc --project hc --prompt x 2>/dev/null) \
+    && python3 "$SCRIPT_DIR/bus.py" write "$TID" --kind milestone m >/dev/null 2>&1 \
+    && [[ $(python3 "$SCRIPT_DIR/bus.py" read "$TID" --json 2>/dev/null | grep -c '"kind"') -eq 2 ]]
+  ) && ok "bus CLI round-trips (spawn->write->read) on a scratch DB" \
+    || bad "bus CLI FAILED a scratch round-trip — spawn/write/read is broken"
+  rm -rf "$BUS_SCRATCH"
+else
+  warn "bus DB not initialized yet — run: python3 scripts/bus.py init"
+fi
+
 # ── 2. DURABILITY ─────────────────────────────────────────────────────────────
 hdr "2. DURABILITY — will it still be working after a reboot?"
 
@@ -176,6 +197,14 @@ if systemctl --user is-enabled agent-morning-brief.timer &>/dev/null; then
   bad "🔴 systemd timer ALSO enabled — DOUBLE BRIEFS. One scheduler only."
 else
   ok "systemd timers disabled (cron is the sole scheduler)"
+fi
+
+# The bus has no daemon (nothing to die on reboot) — its durability is WAL: a crash
+# mid-write leaves a recoverable DB, not a torn one.
+if [[ -f "$BUS_DB" ]]; then
+  [[ "$(python3 -c "import sqlite3,sys; print(sqlite3.connect(sys.argv[1]).execute('PRAGMA journal_mode').fetchone()[0])" "$BUS_DB" 2>/dev/null)" == "wal" ]] \
+    && ok "bus DB in WAL mode (survives a crash mid-write)" \
+    || warn "bus DB not in WAL mode — a crash mid-write could corrupt it"
 fi
 
 # ── 3. RECOVERABILITY ─────────────────────────────────────────────────────────
@@ -224,6 +253,19 @@ else
   warn "no Mac-sync heartbeat yet — the Mac hasn't run the updated sync lib once; can't confirm it's syncing until it does"
 fi
 
+# The bus is captured by the nightly tarball via a consistent snapshot (backup-context.sh
+# runs bus.py snapshot before the tar). Prove the snapshot is fresh.
+if [[ -f "$BUS_DB" ]]; then
+  SNAP="$CTX/local-only/agent_bus.snapshot.db"
+  if [[ -f "$SNAP" ]]; then
+    SAGE=$(( ( $(date +%s) - $(stat -c %Y "$SNAP") ) / 86400 ))
+    [[ $SAGE -le 2 ]] && ok "bus snapshot is ${SAGE}d old (rides the nightly tarball)" \
+                      || warn "bus snapshot is ${SAGE}d old — the nightly snapshot step may be failing"
+  else
+    warn "bus has no consistent snapshot yet — the first nightly backup creates it"
+  fi
+fi
+
 # ── 4. BOUNDEDNESS ────────────────────────────────────────────────────────────
 hdr "4. BOUNDEDNESS — can it run away? (an unbounded agent is an unbounded bill)"
 
@@ -249,6 +291,27 @@ STUCK=$(pgrep -fc 'claude -p' 2>/dev/null); STUCK=${STUCK:-0}
 D=$(df --output=pcent / | tail -1 | tr -dc '0-9')
 [[ "$D" -lt 85 ]] && ok "disk ${D}% used" || bad "disk ${D}% — logs or backups are eating the box"
 
+# A bus writer on a loop can't run away silently — cap rows + file size and warn.
+if [[ -f "$BUS_DB" ]]; then
+  BROWS=$(python3 -c "import sqlite3,sys; print(sqlite3.connect(sys.argv[1]).execute('SELECT COUNT(*) FROM messages').fetchone()[0])" "$BUS_DB" 2>/dev/null || echo 0)
+  BSIZE=$(( $(stat -c %s "$BUS_DB" 2>/dev/null || echo 0) / 1048576 ))
+  [[ "$BROWS" -lt 100000 && "$BSIZE" -lt 200 ]] \
+    && ok "bus bounded: $BROWS messages, ${BSIZE}MB" \
+    || warn "bus is large ($BROWS messages, ${BSIZE}MB) — a writer may be looping; investigate"
+fi
+
+# Deep-work spawner (Phase 2): the TOTAL-concurrency cap must exist, and live agents within
+# it. (run-agent.sh's flock is per-job only; spawn-agent.sh adds the global semaphore.)
+if [[ -f "$SCRIPT_DIR/spawn-agent.sh" ]]; then
+  grep -q 'flock' "$SCRIPT_DIR/spawn-agent.sh" \
+    && ok "spawn-agent has a concurrency semaphore (cap ${AGENT_MAX_CONCURRENT:-2})" \
+    || bad "spawn-agent.sh has NO concurrency cap — deep-work agents could stack on the 8GB box"
+  DW=$(pgrep -fc 'spawn-agent\.sh' 2>/dev/null); DW=${DW:-0}
+  [[ "$DW" -le "${AGENT_MAX_CONCURRENT:-2}" ]] \
+    && ok "deep-work agents within cap ($DW running)" \
+    || bad "$DW deep-work agents running — OVER the cap of ${AGENT_MAX_CONCURRENT:-2}"
+fi
+
 # ── 5. PUBLISHABILITY ─────────────────────────────────────────────────────────
 hdr "5. PUBLISHABILITY — is the PUBLIC repo safe to push?"
 
@@ -262,6 +325,16 @@ fi
 grep -q 'PII' "$SCRIPT_DIR/backup-context.sh" \
   && ok "backup refuses to push the public repo if PII appears" \
   || bad "backup has no PII gate — it could publish your data automatically"
+
+# The bus holds message content (personal data). Its ONLY protection is location: the PII
+# gate skips binaries, so it must be gitignored AND untracked — never a text file, never
+# outside local-only/.
+if git -C "$CTX" check-ignore local-only/agent_bus.db >/dev/null 2>&1 \
+   && ! git -C "$CTX" ls-files --error-unmatch local-only/agent_bus.db >/dev/null 2>&1; then
+  ok "bus DB is gitignored + untracked (message content can't reach GitHub)"
+else
+  bad "🔴 bus DB is TRACKED or not ignored — message content could be pushed. Keep it under local-only/"
+fi
 
 echo
 echo "═════════════════════════════════════════════"

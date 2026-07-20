@@ -9,6 +9,10 @@ backups/
 # OS noise
 .DS_Store
 
+# Python bytecode (render-tasks.py / bus.py generate these on run)
+__pycache__/
+*.pyc
+
 # Belt and suspenders: catch any env variant, but keep the template
 *.env
 !example.env

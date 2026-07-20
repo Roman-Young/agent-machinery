@@ -1,15 +1,28 @@
 #!/usr/bin/env bash
-# sync-repos.sh — mirror a FEW GitHub repos to the server so Cairo can read their
-# PUSHED state (full git history + all branches).
+# sync-repos.sh — keep Roman's WORKSPACE repos in codebases/ current with GitHub, hourly.
 #
 # ══════════════════════════════════════════════════════════════════════════════
-# WHAT THIS IS FOR — and, more importantly, what it is NOT for.
+# WHAT THIS IS (REVERSED 2026-07-20 — this used to be the exact opposite; read on).
 #
-# codebases/ holds the PUSHED state of a SMALL set of repos (full git history + all
-# branches) so server-Cairo can reference what's actually merged/on a branch — useful for
-# PR and paper tracking on the flagship project. It is NOT a mirror of your working tree:
-# you code in VS Code, where Cairo has your files natively. Clone a DELIBERATE few, never
-# "every public repo I own."
+# codebases/ is now Roman's PRIMARY WORKSPACE: he edits these repos in place over VS Code
+# Remote SSH, and Cairo edits them in deep-work sessions. This keeps them current with
+# GitHub. It pulls with --ff-only, which NEVER clobbers local edits or commits — a repo
+# with uncommitted work or a diverged branch is simply skipped. Auth is the global
+# credential helper (git-credential-cairo.sh reads the token from .env), so private repos
+# pull too; the GITHUB_PRIVATE_REPOS token-in-URL path below is now redundant/dormant.
+#
+# Until 2026-07-20 this was a READ-ONLY "reference mirror" of a deliberate few repos'
+# PUSHED state — because the server had no editor and Roman coded on the Mac. Remote-SSH-
+# into-the-server reversed that: the repos ARE the working tree now. (docs/architecture.md
+# Rule 5 note; logs/2026-07-19.md.)
+#
+# TODO — the one un-done piece of the transition: make this SAFE-BUT-LOUD. A genuine
+# divergence (local commits + a remote that moved) is currently swallowed silently; it
+# should notify. Left silent for now because --ff-only cannot lose data — only staleness,
+# never safety.
+#
+# Still true: never clone the server's OWN repos (agent-machinery, my-context) — a second
+# copy is pure drift.
 # Auto-discovering all of them (the old behaviour) re-cloned repos the Mac mirror already
 # provides, cloned agent-machinery onto its own server, and created "which copy am I
 # reading?" confusion. An audit on 2026-07-14 found 4 of 5 auto-discovered clones were
