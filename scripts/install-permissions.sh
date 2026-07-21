@@ -52,6 +52,12 @@ perms["allow"] = [
     f"Edit({ws}/agent-machinery/**)",
     f"Write({ws}/agent-machinery/**)",
     f"Read({ws}/codebases/**)",
+    # Codebase WRITE (added 2026-07-21): Roman is server-canonical, editing his repo clones
+    # via Remote-SSH with a push-capable token. Safe under the security model — the jobs that
+    # ingest untrusted email/web pass their OWN narrow --allowedTools (no Bash, no Write), so
+    # only INTERACTIVE sessions (Roman present) can write code. See docs/permissions.md §2.
+    f"Edit({ws}/codebases/**)",
+    f"Write({ws}/codebases/**)",
 ] + perms["allow"]
 
 perms["deny"] = [
@@ -73,6 +79,22 @@ json.dump(out, open(dest, "w"), indent=2)
 print(f"installed → {dest}")
 print(f"  allow: {len(perms['allow'])}  ask: {len(perms['ask'])}  deny: {len(perms['deny'])}")
 PY
+
+# ── User-level CLAUDE.md: the IDENTITY twin of settings.json. ─────────────────
+# ~/.claude/CLAUDE.md loads at EVERY cwd — the same reason the permission policy has to live
+# at the user level. This makes ANY folder on the server be Cairo with full context, not just
+# the workspace root (previously, a folder outside ~/agent got a blank Claude — Claude Code
+# only finds the bootstrap by walking UP to ~/agent/CLAUDE.md). Rendered from the path-free
+# versioned source with the real workspace path substituted, so the public repo stays path-free.
+ID_SRC="$REPO_DIR/.claude/server-identity.md"
+ID_DEST="$HOME/.claude/CLAUDE.md"
+if [[ -f "$ID_SRC" ]]; then
+  [[ -f "$ID_DEST" ]] && cp "$ID_DEST" "$ID_DEST.bak.$(date +%Y%m%d-%H%M%S)"
+  sed "s#__WS__#${WORKSPACE}#g" "$ID_SRC" > "$ID_DEST"
+  echo "installed → $ID_DEST (server-wide Cairo identity)"
+else
+  echo "note: $ID_SRC not found — skipping user-level CLAUDE.md"
+fi
 
 # settings.local.json auto-accumulates a rule on every "always allow" click. On 2026-07-12
 # it had silently collected read access to the private deploy keys. By 07-14 it had

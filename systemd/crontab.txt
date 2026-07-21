@@ -50,6 +50,13 @@ S=/home/roman/agent/agent-machinery/scripts
 # box. Includes a PII gate that refuses to push the PUBLIC repo if it finds emails or IPs.
 15 9,10  * * *  /home/roman/agent/agent-machinery/scripts/run-local.sh 02:15 /home/roman/agent/agent-machinery/scripts/backup-context.sh >> /home/roman/.agent-logs/backup.log 2>&1
 
+# ── DAILY ROLLOVER — 03:00 local, LAST in the nightly cluster ────────────────
+# Runs AFTER journal (01:45) + maintenance (02:00) + backup (02:15), so the day is fully
+# logged and backed up before anything is archived. Creates today's ~/daily/YYYY-MM-DD/
+# workspace and sweeps Claude Code session histories idle >=48h AND already-journaled into
+# ~/daily/_archive/ (moved, never deleted). Deterministic bash, no LLM, spends zero tokens.
+0 10,11  * * *  /home/roman/agent/agent-machinery/scripts/run-local.sh 03:00 /home/roman/agent/agent-machinery/scripts/daily-rollover.sh >> /home/roman/.agent-logs/cron.log 2>&1
+
 # ── OUTBOX (timezone-independent) ────────────────────────────────────────────
 # Mac-Cairn cannot write memory (one-writer rule), so it leaves REQUESTS in an outbox.
 # Without this, a task added while coding in VS Code goes NOWHERE. Exits instantly and
@@ -68,4 +75,11 @@ S=/home/roman/agent/agent-machinery/scripts
 # ── LOG ROTATION — Monday 04:00 local ───────────────────────────────────────
 # Logs grew unbounded until 2026-07-14 (the paseo daemon log hit 6.3MB in two days).
 0 11,12 * * 1  /home/roman/agent/agent-machinery/scripts/run-local.sh 04:00 /usr/sbin/logrotate -s /home/roman/.agent-logs/logrotate.state /home/roman/agent/agent-machinery/scripts/logrotate.conf >> /home/roman/.agent-logs/cron.log 2>&1
+
+# ── EMAIL TRIAGE — hourly, 07:00–23:00 UTC ───────────────────────────────────
+# Triages the Gmail inbox and surfaces what matters. Runs on a plain UTC hour range (not a
+# single local time), so it needs no run-local.sh twin. NOTE (2026-07-21): this line was
+# live in the installed crontab but had drifted OUT of this source file; restored here so an
+# install from this file no longer silently drops it. The source file is the source of truth.
+25 7-23 * * *   /home/roman/agent/agent-machinery/scripts/email-triage.sh >> /home/roman/.agent-logs/triage.log 2>&1
 # ─────────────────────────────────────────────────────────────────────────────
