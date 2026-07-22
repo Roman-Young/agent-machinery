@@ -3,9 +3,9 @@
 #
 # ══════════════════════════════════════════════════════════════════════════════
 # WHAT IT DOES, IN ONE LINE:
-#   Makes the Claude Code on your Mac BE Cairo — and keeps it in sync with the server.
+#   Makes the Claude Code on your Mac BE Kairo — and keeps it in sync with the server.
 #
-# Cairo is not a program. It is a Claude Code session that has read your context files.
+# Kairo is not a program. It is a Claude Code session that has read your context files.
 # The Claude in your VS Code has never read them, so it doesn't know who you are. This
 # fixes that by putting the context ON the Mac and pointing every session at it.
 #
@@ -14,17 +14,17 @@
 # high-stakes for you, or that "unearned fluency is a liability" is your own thesis. It
 # just writes the Rust and hands it over. After this, it teaches instead.
 #
-# THERE IS NO LIVE CONNECTION between the two Cairos. They are not talking to each other.
+# THERE IS NO LIVE CONNECTION between the two Kairos. They are not talking to each other.
 # They SHARE FILES, synced every 5 minutes. That's the whole mechanism.
 #
-#   memory      server ──▶ Mac   (so Mac-Cairo knows you)
+#   memory      server ──▶ Mac   (so Mac-Kairo knows you)
 #   transcripts Mac    ──▶ server (so the nightly journal sees your VS Code work)
-#   code        Mac    ──▶ server (optional; so you can ask Cairo about uncommitted
+#   code        Mac    ──▶ server (optional; so you can ask Kairo about uncommitted
 #                                  code FROM YOUR PHONE)
 #
 # ⚠️ THE ONE-WRITER RULE — everything depends on it:
-#   The SERVER owns memory.  Mac-Cairo reads it, never writes it.
-#   The MAC owns code.       Server-Cairo reads it, never writes it.
+#   The SERVER owns memory.  Mac-Kairo reads it, never writes it.
+#   The MAC owns code.       Server-Kairo reads it, never writes it.
 #   Two writers to one memory = silent divergence = memory you can't trust = system dead.
 # ══════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
@@ -42,12 +42,12 @@ fi
 
 CAIRN_HOME="$HOME/cairn"
 
-# NOTE: no project/code sync anymore (simplified 2026-07-15). Server-Cairo learns your
+# NOTE: no project/code sync anymore (simplified 2026-07-15). Server-Kairo learns your
 # work from your VS Code CONVERSATIONS (transcripts), not from mirrored files — the code
 # lives where you code. This installer just sets up the memory mirror + the self-updating
 # sync bootstrap; the sync logic itself is scripts/mac-sync-lib.sh.
 
-echo "═══ Installing Cairo on this Mac ═══"
+echo "═══ Installing Kairo on this Mac ═══"
 echo "server: $SERVER"
 echo
 
@@ -121,7 +121,7 @@ mkdir -p "$HOME/.cairn" "$CAIRN_HOME"
 
 cat > "$HOME/.cairn/run.sh" <<BOOTSTRAP
 #!/usr/bin/env bash
-# Cairo sync bootstrap — STABLE. Pulls the latest sync logic and runs it.
+# Kairo sync bootstrap — STABLE. Pulls the latest sync logic and runs it.
 # Only SERVER/CAIRN_HOME are frozen here (they rarely change); the LOGIC self-updates.
 set -uo pipefail
 export SERVER="$SERVER"
@@ -155,7 +155,7 @@ echo "Running first sync (this may take a moment)..."
 "$HOME/.cairn/run.sh" || echo "  (first sync had a hiccup — the 5-min job will retry)"
 echo "✅ memory mirrored to $CAIRN_HOME/my-context"
 
-# ── 3. The bit that makes Mac-Claude into Cairo ───────────────────────────────
+# ── 3. The bit that makes Mac-Claude into Kairo ───────────────────────────────
 # ~/.claude/CLAUDE.md loads in EVERY Claude Code session on this Mac — every folder,
 # the VS Code extension panel, and the integrated terminal alike. All of them run
 # locally on the Mac, so all of them read this file.
@@ -164,7 +164,7 @@ echo "✅ memory mirrored to $CAIRN_HOME/my-context"
 # scripts/mac-identity.md, and mac-sync-lib.sh re-pulls it every 5 minutes — same pattern
 # as the sync logic itself. Editing it here would only ever affect a fresh install; the
 # ~15 lines below are a ONE-TIME seed so it's correct before the first sync tick runs.
-# (Bug this fixes: a 2026-07-15 rename from "Cairn" to "Cairo" was correct on the server
+# (Bug this fixes: a 2026-07-15 rename from "Cairn" to "Kairo" was correct on the server
 # instantly but sat un-adopted on Roman's Mac for two days, because the old version of
 # this installer embedded the identity as a static heredoc with no re-pull. Caught when
 # he asked "who am I?" and got the old name back.)
@@ -205,13 +205,13 @@ Done. Open VS Code, run \`claude\` in any project folder, and ask:
 
     "who am I?"
 
-If it knows about PEPMatch, Salk, and the 2-indel PR — Cairo is home.
+If it knows about PEPMatch, Salk, and the 2-indel PR — Kairo is home.
 
   memory mirror : $CAIRN_HOME/my-context   ← READ-ONLY. Never edit.
   backups       : $CAIRN_HOME/backups      ← the 2nd copy. This is what makes it a backup.
   identity      : ~/.claude/CLAUDE.md
   sync log      : tail ~/.cairn/sync.log
-  add projects  : NOTHING TO DO. Use Cairo in the folder once; it self-registers.
+  add projects  : NOTHING TO DO. Use Kairo in the folder once; it self-registers.
   uninstall     : launchctl unload $PLIST && rm ~/.claude/CLAUDE.md
 ═══════════════════════════════════════════════════════════════
 EOF

@@ -43,7 +43,7 @@ export AGENT_MAX_TURNS=40
 export PUSH_OUTPUT=0
 
 "$SCRIPT_DIR/run-agent.sh" nightly-journal \
-"You are Cairo, writing today's log entry. Today is $TODAY.
+"You are Kairo, writing today's log entry. Today is $TODAY.
 
 TODAY'S SESSION TRANSCRIPTS — read these with the Read tool (they are JSONL, one JSON
 object per line; they may be large, so read in chunks and skim for substance rather than

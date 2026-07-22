@@ -7,7 +7,7 @@
 # Paseo's daemon was started BY HAND. It has no systemd unit and no cron entry, and its
 # supervisor is orphaned (PPID 1) with its argv rewritten — so the original command that
 # launched it is unrecoverable. A reboot kills it and it never comes back. Roman would
-# lose his phone channel to Cairo, and the only way back in would be SSH — the exact thing
+# lose his phone channel to Kairo, and the only way back in would be SSH — the exact thing
 # this system exists to avoid.
 #
 # THE DESIGN PRINCIPLE (this is the part that generalizes)
@@ -51,17 +51,17 @@ sleep 6
 if daemon_up; then
   echo "$(date -Is) paseo: restarted OK"
   "$SCRIPT_DIR/notify.sh" fyi "✅ Paseo is back" \
-    "The server rebooted or Paseo crashed, and the watchdog restarted it. Your phone channel to Cairo is live again." \
+    "The server rebooted or Paseo crashed, and the watchdog restarted it. Your phone channel to Kairo is live again." \
     >/dev/null 2>&1 || true
 else
   echo "$(date -Is) paseo: RESTART FAILED"
   "$SCRIPT_DIR/notify.sh" alert "🔴 PASEO IS DOWN — action needed" \
-"The watchdog could not restart Paseo, so your phone channel to Cairo is dead.
+"The watchdog could not restart Paseo, so your phone channel to Kairo is dead.
 
 SSH in to the server and run:
   paseo
 
-Then tell Cairo the command that worked, so the watchdog can be corrected. Everything
+Then tell Kairo the command that worked, so the watchdog can be corrected. Everything
 else (morning brief, nightly journal, email) is unaffected — those run on cron." \
     >/dev/null 2>&1 || true
   exit 1

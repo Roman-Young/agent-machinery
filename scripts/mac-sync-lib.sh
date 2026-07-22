@@ -3,22 +3,22 @@
 # bootstrap (~/.cairn/run.sh), so edits here reach the Mac within 5 min with no re-install.
 #
 # ══════════════════════════════════════════════════════════════════════════════
-# THE MODEL — two Cairos, a clean division of labour (simplified 2026-07-15).
+# THE MODEL — two Kairos, a clean division of labour (simplified 2026-07-15).
 #
-#   VS Code Cairo  = does the CODING. Has your code natively (it's on the Mac) + your
+#   VS Code Kairo  = does the CODING. Has your code natively (it's on the Mac) + your
 #                    memory (synced DOWN). It never needs anything mirrored.
-#   Server Cairo   = KNOWS and BRIEFS. Learns what you're working on from your VS Code
+#   Server Kairo   = KNOWS and BRIEFS. Learns what you're working on from your VS Code
 #                    CONVERSATIONS (synced UP → the nightly journal reads them).
 #
 # So NO CODE crosses between Mac and server. That entire effort — mirroring working
 # trees, project discovery, size caps, the 400MB prune saga — was the server trying to
-# do VS Code Cairo's job. Removed. Your conversations carry what you're doing better than
+# do VS Code Kairo's job. Removed. Your conversations carry what you're doing better than
 # a pile of files ever could, and the code lives where you code.
 #
 # FOUR flows remain, and that's the whole story:
-#   DOWN  memory      → VS Code Cairo knows you
-#   UP    transcripts → server Cairo knows your work (journal reads them)
-#   UP    outbox      → memory-change requests VS Code Cairo leaves for the server
+#   DOWN  memory      → VS Code Kairo knows you
+#   UP    transcripts → server Kairo knows your work (journal reads them)
+#   UP    outbox      → memory-change requests VS Code Kairo leaves for the server
 #   DOWN  backups     → the 2nd copy that makes the backup a real backup (3-2-1)
 #
 # Reads two things from the environment (set by the bootstrap), so it holds no personal
@@ -33,7 +33,7 @@ ssh "$SERVER" "mkdir -p ~/mac-transcripts ~/mac-outbox ~/.agent-logs" 2>/dev/nul
 
 # ── DOWN: IDENTITY. ~/.claude/CLAUDE.md loads in every Claude Code session on this Mac,
 # and it used to be written ONCE at install time — a static snapshot. When Roman renamed
-# the agent Cairn -> Cairo (2026-07-15), the server-side files updated instantly but his
+# the agent Cairn -> Kairo (2026-07-15), the server-side files updated instantly but his
 # Mac kept saying "Cairn" for two days, because nothing ever re-pulled this file. Fixed by
 # giving it the same self-update treatment as the sync logic itself: pull fresh, validate
 # non-empty before adopting (a failed/empty pull must never blank out a working identity),
@@ -46,17 +46,17 @@ else
 fi
 
 # ── DOWN: memory. --delete so a file removed on the server disappears here too, instead
-#    of VS Code Cairo reading a ghost. local-only/ deliberately stays server-side.
+#    of VS Code Kairo reading a ghost. local-only/ deliberately stays server-side.
 rsync -az --delete --exclude '.git' --exclude 'local-only' \
   "$SERVER:agent/my-context/" "$CAIRN_HOME/my-context/" 2>/dev/null || true
 
-# ── UP: your VS Code Cairo conversations. THIS is how the server learns your work — the
+# ── UP: your VS Code Kairo conversations. THIS is how the server learns your work — the
 #    nightly journal reads them and writes the log. Only .jsonl transcripts, nothing else.
 [ -d "$HOME/.claude/projects" ] && \
   rsync -az --include '*/' --include '*.jsonl' --exclude '*' \
     "$HOME/.claude/projects/" "$SERVER:mac-transcripts/" 2>/dev/null || true
 
-# ── UP: the OUTBOX. VS Code Cairo can't write memory (one-writer rule); it leaves requests
+# ── UP: the OUTBOX. VS Code Kairo can't write memory (one-writer rule); it leaves requests
 #    here and the server applies them. Without this, a task you add while coding goes nowhere.
 mkdir -p "$HOME/cairn/outbox"
 rsync -az "$HOME/cairn/outbox/" "$SERVER:mac-outbox/" 2>/dev/null || true

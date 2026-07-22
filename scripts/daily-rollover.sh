@@ -5,7 +5,7 @@
 # WHAT IT DOES (two jobs, one nightly pass, NO LLM — pure deterministic bash):
 #
 #   1. Ensures TODAY'S workspace folder exists:  ~/daily/YYYY-MM-DD/
-#      This is the standardized place Roman opens Cairo (VS Code Remote-SSH) and talks
+#      This is the standardized place Roman opens Kairo (VS Code Remote-SSH) and talks
 #      to it. It is NOT a copy of any code — code lives in ~/agent/codebases/. The folder
 #      is the desk; what gets FILED is the day's log (see below).
 #
@@ -16,7 +16,7 @@
 #
 # WHY THIS ISN'T THE JOURNAL: the journal (nightly-journal.sh) SUMMARIZES each day's chats
 # into my-context/logs/YYYY-MM-DD.md — that already exists and is the durable per-day record
-# that Cairo reads to learn Roman. THIS script only manages the WORKSPACE and the SIDEBAR.
+# that Kairo reads to learn Roman. THIS script only manages the WORKSPACE and the SIDEBAR.
 # The two are ordered deliberately in cron: journal first (01:45) so the day is captured,
 # THEN this rollover (03:00) so nothing is archived before it's been logged.
 #
@@ -57,13 +57,13 @@ elif [[ $DRY_RUN -eq 1 ]]; then
 else
   mkdir -p "$DAYDIR"
   cat > "$DAYDIR/README.md" <<EOF
-# Cairo — $TODAY
+# Kairo — $TODAY
 
-Today's Cairo workspace. Open it in VS Code (Remote-SSH) and talk to Cairo here.
+Today's Kairo workspace. Open it in VS Code (Remote-SSH) and talk to Kairo here.
 
 - Tonight's journal writes the durable summary of today's chats to:
   \`my-context/logs/$TODAY.md\`  — What happened / Decisions / Open loops.
-  That log is what Cairo reads to keep learning you; this folder is just the desk.
+  That log is what Kairo reads to keep learning you; this folder is just the desk.
 - Older Claude Code histories are swept out of the sidebar to \`$ARCHIVE/\`
   (moved, never deleted).
 - Code you actually edit lives in \`~/agent/codebases/\` — open those folders to code.

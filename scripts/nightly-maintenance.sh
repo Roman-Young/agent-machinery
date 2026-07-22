@@ -50,7 +50,7 @@ export AGENT_TIMEOUT_SEC=300
 export PUSH_OUTPUT=1   # summarise the night's cleanup to the phone
 
 "$SCRIPT_DIR/run-agent.sh" nightly-maintenance \
-"You are Cairo doing end-of-day memory hygiene. Today is $TODAY. Be CONSERVATIVE — you are
+"You are Kairo doing end-of-day memory hygiene. Today is $TODAY. Be CONSERVATIVE — you are
 running unsupervised at night, so do only the safe judgment-call parts and FLAG the rest.
 
 ⚠️ tasks.md has ALREADY been regenerated from tasks.yaml (deterministic overdue-flagging
