@@ -22,6 +22,7 @@ you have your own agent.
    │       │                                        │
    │  cron ├──► morning-brief.sh   07:30 → ntfy → phone
    │       ├──► nightly-journal.sh 01:45 → logs/
+   │       ├──► weekly-rollup.sh   Mon 03:30 → logs/weekly/
    │       ├──► backup-context.sh  02:15 → git + tarball
    │       ├──► healthcheck.sh     weekly
    │       └──► paseo-watchdog.sh  @reboot + every 10m
@@ -82,6 +83,7 @@ job can forget a guard:
 | `scripts/run-agent.sh` | The choke point: env, least-privilege tools, all five guards. |
 | `scripts/morning-brief.sh` | Email triage + tasks + deadlines → phone. Asserts its own coverage. |
 | `scripts/nightly-journal.sh` | Distils the day's session transcripts → `logs/`. |
+| `scripts/weekly-rollup.sh` | Distils a finished week's dailies → `logs/weekly/` — the middle memory tier. |
 | `scripts/backup-context.sh` | git push + tarball the gitignored content. PII-gated. |
 | `scripts/healthcheck.sh` | Tests all five properties. Run after any change. |
 | `scripts/paseo-watchdog.sh` | Keeps the phone channel alive across reboots and crashes. |

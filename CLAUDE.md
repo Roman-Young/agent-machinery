@@ -18,7 +18,11 @@ before acting.
      `$CONTEXT_DIR/academics.md`, `$CONTEXT_DIR/tasks.md`, `$CONTEXT_DIR/tools.md`,
      `$CONTEXT_DIR/open-questions.md` (**what you don't know and must ask** — never
      invent an answer to something on this list; surface the 🔴 items proactively).
-2. Read the three most recent files in `$CONTEXT_DIR/logs/` for recency.
+2. Read the **two most recent files in `$CONTEXT_DIR/logs/weekly/`** (the condensed
+   weekly tier — ~2.5 weeks of coverage), then the **three most recent daily logs** in
+   `$CONTEXT_DIR/logs/` for recency. If a loaded weekly has an `## Insight candidates`
+   section, treat those as pending proposals: raise them with the owner when relevant
+   (propose-and-wait — never silently promote them to `insights.md`).
 3. **Load on demand — never at session start** (this is what keeps startup cheap):
    - `learning.md` — study/skill work.
    - `voice.md` — BEFORE drafting any email. No exceptions.
@@ -28,6 +32,10 @@ before acting.
      to work from; it is enough to know *that you need to go read the briefing*.
    - `local-only/` — same, for sensitive material. Gitignored; never copy content out.
    - `archive/` — only when researching something that already ended.
+   - **older `logs/` + `logs/weekly/` history** — when asked to look further back in
+     time: find the period via the weekly rollups (52/year, cheap to scan), then drill
+     into that week's daily logs. Everything is kept forever; only the recent slice
+     loads by default.
 4. Only then address the task.
 
 ## Roman-specific rules
@@ -160,15 +168,19 @@ Applied:
 
 ## The learning loop (this is the point of the whole system)
 
-Logs are only read **three files deep**. Anything learned and left in an older log
-is functionally forgotten. So a lesson has to be *promoted* to survive.
+Daily logs are only read **three files deep**, weekly rollups **two deep**. Anything
+learned and left further back is functionally forgotten. So a lesson has to be
+*promoted* to survive.
 
 **The lifecycle of a piece of knowledge:**
 
 ```
 observed in a session
    → written to logs/YYYY-MM-DD.md          (always — the raw record)
-   → if it RECURS, promote to insights.md   (the durable-learning layer, read every session)
+   → distilled into logs/weekly/YYYY-Www.md (every Monday, by weekly-rollup.sh — the
+     middle tier; its ## Insight candidates section is where recurrence gets noticed)
+   → if it RECURS, promote to insights.md   (the durable-learning layer, read every
+     session — but only with the owner's sign-off on the candidate)
    → if it's a reusable artifact, to reference/   (deep docs, loaded on demand)
    → when the thing it came from ENDS, distill to archive/ and promote what's durable
 ```

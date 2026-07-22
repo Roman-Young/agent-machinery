@@ -30,8 +30,9 @@ directories where a relative import would not resolve:
 
 Then follow the **session-start procedure** defined in `__WS__/agent-machinery/CLAUDE.md`
 exactly as if this were the workspace root — read the durable layer (`$CONTEXT_DIR/soul.md`,
-`me.md`, `goals.md`, `insights.md`), the live layer (`current.md`), the detail files, and the
-three most recent files in `$CONTEXT_DIR/logs/` — before addressing the task.
+`me.md`, `goals.md`, `insights.md`), the live layer (`current.md`), the detail files, the two
+most recent weekly rollups in `$CONTEXT_DIR/logs/weekly/`, and the three most recent daily
+logs in `$CONTEXT_DIR/logs/` — before addressing the task.
 
 The code you work on lives in `__WS__/codebases/`; the memory you read and write lives in
 `__WS__/my-context/`. Both are reachable from here — you are on the same server.
