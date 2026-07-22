@@ -5,7 +5,7 @@
 # WHAT THIS IS (REVERSED 2026-07-20 — this used to be the exact opposite; read on).
 #
 # codebases/ is now Roman's PRIMARY WORKSPACE: he edits these repos in place over VS Code
-# Remote SSH, and Cairo edits them in deep-work sessions. This keeps them current with
+# Remote SSH, and Kairo edits them in deep-work sessions. This keeps them current with
 # GitHub. It pulls with --ff-only, which NEVER clobbers local edits or commits — a repo
 # with uncommitted work or a diverged branch is simply skipped. Auth is the global
 # credential helper (git-credential-cairo.sh reads the token from .env), so private repos

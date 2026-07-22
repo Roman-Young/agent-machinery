@@ -6,7 +6,7 @@ gated behind its own approval.
 
 ## Why it exists
 
-The goal is a small multi-agent org: **owner = CEO, Cairo = CTO/orchestrator, deep-work
+The goal is a small multi-agent org: **owner = CEO, Kairo = CTO/orchestrator, deep-work
 agents = managers, sub-agents = workers.** The hard problem is that separate chats and
 headless agents **cannot talk to each other** — each is its own context. So without a
 shared store, running several at once means the *human* becomes the glue, tab-switching
@@ -103,7 +103,7 @@ untrusted content**").
 
 `spawn-agent.sh <thread-id> [--tools …] [--label …] [--dir …]` runs ONE milestone of a
 deep-work agent for a thread, then stops. Two calls shaped it: **manual continuation**
-(nothing continues without approval) and **orchestrator-only** (only Cairo spawns; a worker
+(nothing continues without approval) and **orchestrator-only** (only Kairo spawns; a worker
 can't spawn workers).
 
 **The loop:**
@@ -114,7 +114,7 @@ can't spawn workers).
 3. The **wrapper** (not the worker) parses that line, writes the matching message to the
    bus, flips the thread status, and fires the right ntfy tier (fyi for milestone/done,
    alert for needs_input/blocked). Then it exits.
-4. On a milestone the thread goes to `needs_input` (**paused**). To continue, Cairo writes
+4. On a milestone the thread goes to `needs_input` (**paused**). To continue, Kairo writes
    an `override` (your approval) and re-runs `spawn-agent.sh <id>`; the worker reads the
    updated thread (prior work + the override) and does the next chunk.
 
@@ -137,7 +137,7 @@ no shell; a multi-step task PAUSED after one milestone (`needs_input`), and afte
 `override` approval, continued — reading its prior work + the steering, adding the next
 piece without redoing the first.
 
-**How Cairo uses it** (on your word):
+**How Kairo uses it** (on your word):
 ```bash
 python3 scripts/bus.py spawn --title "…" --project X --by cairo --prompt "the brief"
 scripts/spawn-agent.sh <id> --tools "Read,Glob,Grep,Edit,Write" --label worker-1 --dir /abs/project

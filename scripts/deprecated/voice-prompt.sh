@@ -5,13 +5,13 @@
 # THE HANDS-FREE VOICE PATH (no Paseo, no talk-back, no open ports beyond SSH).
 #
 #   "Hey Siri, <phrase>" → phone dictates your words → SSH to the server → THIS runs
-#   the query through Cairo → the answer pushes back to your phone via ntfy.
+#   the query through Kairo → the answer pushes back to your phone via ntfy.
 #
 # SECURITY — this is wired as a FORCED COMMAND in authorized_keys (see
 # authorize-phone-key.sh), which is what makes it safe to expose over SSH:
 #   • The phone's key can ONLY run this script. It cannot get a shell, run arbitrary
 #     commands, forward ports, or open a PTY. So even if the phone key leaks, the worst
-#     an attacker can do is send Cairo a query — and the ANSWER goes to ROMAN's phone,
+#     an attacker can do is send Kairo a query — and the ANSWER goes to ROMAN's phone,
 #     not theirs. No shell, no exfiltration.
 #   • The query arrives in $SSH_ORIGINAL_COMMAND (whatever the phone "ran"), and is
 #     treated as plain TEXT — never executed.
@@ -26,7 +26,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 QUERY="${SSH_ORIGINAL_COMMAND:-$*}"
 QUERY="$(printf '%s' "$QUERY" | tr -d '\000-\010\013\014\016-\037' | head -c 1500)"
 if [[ -z "${QUERY// /}" ]]; then
-  "$SCRIPT_DIR/notify.sh" "🎤 Cairo" "I got an empty voice query — try again." >/dev/null 2>&1 || true
+  "$SCRIPT_DIR/notify.sh" "🎤 Kairo" "I got an empty voice query — try again." >/dev/null 2>&1 || true
   echo "empty query"; exit 0
 fi
 
@@ -41,7 +41,7 @@ export PUSH_OUTPUT=1   # run-agent pushes the answer to the phone via ntfy
 
 "$SCRIPT_DIR/run-agent.sh" voice-prompt \
 "Roman sent you this BY VOICE from his phone (transcribed, so a word or two may be garbled —
-decode proper nouns from context; 'Con'/'Cairo' is you, 'Pet Match' is PEPMatch):
+decode proper nouns from context; 'Con'/'Kairo' is you, 'Pet Match' is PEPMatch):
 
     \"$QUERY\"
 

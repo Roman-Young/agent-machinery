@@ -12,7 +12,7 @@
 #     the next milestone only runs when Roman approves and the orchestrator re-fires this
 #     script. There is no timer, no self-continuation. "Propose and wait", enforced by
 #     the process model, not by a prompt we hope the model obeys.
-#   * ORCHESTRATOR-ONLY. Only Cairo runs this. A worker cannot spawn its own workers.
+#   * ORCHESTRATOR-ONLY. Only Kairo runs this. A worker cannot spawn its own workers.
 #
 # It is bounded by construction, three ways:
 #   1. Every milestone is a fresh run through run-agent.sh — so it inherits ALL of that

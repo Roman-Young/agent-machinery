@@ -56,7 +56,7 @@ export AGENT_TIMEOUT_SEC=420
 export PUSH_OUTPUT=0   # we inspect output and push per-URGENT below, after the coverage check
 
 OUT=$("$SCRIPT_DIR/run-agent.sh" email-triage \
-"You are Cairo, triaging Roman's PERSONAL Gmail inbox. Now: $(date +'%A %B %d, %Y %H:%M').
+"You are Kairo, triaging Roman's PERSONAL Gmail inbox. Now: $(date +'%A %B %d, %Y %H:%M').
 
 READ FIRST, from the context repo:
 - me.md  -> the table of PEOPLE / EMAIL SENDERS that matter (Dan Marrama, Danish Umar,

@@ -4,7 +4,7 @@ every spawned agent write to (by thread) and read on each write, so one seat can
 and STEER the whole fleet instead of juggling N blind, disconnected chats.
 
 WHY THIS EXISTS (2026-07-20)
-Roman is moving toward the multi-agent org sketched with Dan: Roman = CEO, Cairo =
+Roman is moving toward the multi-agent org sketched with Dan: Roman = CEO, Kairo =
 CTO/orchestrator, deep-work agents = managers, sub-agents = workers. Separate chats /
 headless agents cannot talk to each other directly, so they talk THROUGH this table:
 the orchestrator writes a brief under a thread id, an agent reads it to start, writes

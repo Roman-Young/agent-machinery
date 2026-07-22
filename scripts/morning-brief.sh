@@ -33,7 +33,7 @@ export AGENT_TIMEOUT_SEC=420   # a brief that takes >7min is hung, not thorough
 export PUSH_OUTPUT=0   # we push manually below, AFTER verifying coverage
 
 OUT=$("$SCRIPT_DIR/run-agent.sh" morning-brief \
-"You are Cairo, writing Roman's morning brief. Today is $(date +'%A %B %d, %Y').
+"You are Kairo, writing Roman's morning brief. Today is $(date +'%A %B %d, %Y').
 
 READ FIRST, from the context repo:
 - tasks.md   (the single source of truth for all actions and deadlines)

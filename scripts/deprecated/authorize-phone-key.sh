@@ -4,7 +4,7 @@
 #
 # Usage:  ./authorize-phone-key.sh 'ssh-ed25519 AAAA...the-public-key... phone'
 #
-# Roman runs this (not Cairo) because Cairo is deliberately denied access to ~/.ssh.
+# Roman runs this (not Kairo) because Kairo is deliberately denied access to ~/.ssh.
 # It locks the phone's key to a FORCED COMMAND: that key can only ever run voice-prompt.sh.
 # It cannot get a shell, run other commands, forward ports, or open a terminal — so exposing
 # it on the phone is safe. If the phone is lost, delete the line and the access is gone.
