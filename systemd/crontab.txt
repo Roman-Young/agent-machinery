@@ -22,6 +22,7 @@
 #   02:15 local  =  09:15 UTC  |  10:15 UTC
 #   09:00 local  =  16:00 UTC  |  17:00 UTC
 #   04:00 local  =  11:00 UTC  |  12:00 UTC
+#   03:30 local  =  10:30 UTC  |  11:30 UTC
 
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/roman/.npm-global/bin
 SHELL=/bin/bash
@@ -56,6 +57,14 @@ S=/home/roman/agent/agent-machinery/scripts
 # workspace and sweeps Claude Code session histories idle >=48h AND already-journaled into
 # ~/daily/_archive/ (moved, never deleted). Deterministic bash, no LLM, spends zero tokens.
 0 10,11  * * *  /home/roman/agent/agent-machinery/scripts/run-local.sh 03:00 /home/roman/agent/agent-machinery/scripts/daily-rollover.sh >> /home/roman/.agent-logs/cron.log 2>&1
+
+# ── WEEKLY ROLLUP — Monday 03:30 local, after the whole nightly cluster ──────
+# Distils the just-finished week's daily logs into logs/weekly/YYYY-Www.md — the middle
+# memory tier (session start loads 2 weeklies + 3 dailies; older history is on-demand).
+# Monday 03:30 so Sunday's journal (01:45), maintenance (02:00) and backup (02:15) have
+# all landed first: the week's last daily exists before it is rolled up. Idempotent —
+# if the rollup already exists it exits instantly, so the DST twin costs nothing.
+30 10,11 * * 1  /home/roman/agent/agent-machinery/scripts/run-local.sh 03:30 /home/roman/agent/agent-machinery/scripts/weekly-rollup.sh >> /home/roman/.agent-logs/cron.log 2>&1
 
 # ── OUTBOX (timezone-independent) ────────────────────────────────────────────
 # Mac-Cairn cannot write memory (one-writer rule), so it leaves REQUESTS in an outbox.

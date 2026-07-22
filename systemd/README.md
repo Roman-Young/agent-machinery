@@ -16,18 +16,24 @@ already installed and active. So cron won it on the only axis that mattered: it 
 
 Both were real, and both are handled in the installed crontab:
 
-1. **`CRON_TZ=America/Los_Angeles`.** The server is `Etc/UTC`. Without this, `30 7` means
+1. **Timezones — and `CRON_TZ` is NOT the fix.** The server is `Etc/UTC`, so `30 7` means
    07:30 **UTC** = **00:30 Pacific** — the "morning" brief arrives at half past midnight.
-   `CRON_TZ` also tracks DST, so it won't drift an hour twice a year.
+   That happened. Worse: **Debian/Ubuntu cron silently IGNORES `CRON_TZ`**, so setting it
+   only makes the crontab *look* fixed (it was live for a day; see crontab.txt's header).
+   The real fix: fire at both candidate UTC times and let `run-local.sh` pass through the
+   one matching the target local clock. DST-proof, no sudo.
 2. **`PATH`.** Cron starts with a near-empty PATH. Without an explicit one, `claude` is
    simply *not found*, and the job fails silently every single day.
 
 ## Current schedule
 
+*(Highlights only — `crontab.txt` is the full, authoritative schedule.)*
+
 | Job | When (Pacific) | What |
 |---|---|---|
 | `morning-brief.sh` | **07:30** daily | Email triage + today's tasks + deadlines → ntfy push |
 | `nightly-journal.sh` | **01:45** daily | Distills the day's session transcripts → `logs/` |
+| `weekly-rollup.sh` | **03:30** Monday | Distills the finished week's dailies → `logs/weekly/` |
 
 Journal runs at 01:45 on purpose: Roman's deep-work block is ~10pm–1am, so a journal at
 11pm would systematically miss his three most productive hours.
