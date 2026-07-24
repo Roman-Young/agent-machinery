@@ -54,8 +54,9 @@ S=/home/roman/agent/agent-machinery/scripts
 # ── DAILY ROLLOVER — 03:00 local, LAST in the nightly cluster ────────────────
 # Runs AFTER journal (01:45) + maintenance (02:00) + backup (02:15), so the day is fully
 # logged and backed up before anything is archived. Creates today's ~/daily/YYYY-MM-DD/
-# workspace and sweeps Claude Code session histories idle >=48h AND already-journaled into
-# ~/daily/_archive/ (moved, never deleted). Deterministic bash, no LLM, spends zero tokens.
+# workspace and sweeps individual already-journaled conversations idle >=24h (per-chat, so
+# an actively-used project still tidies) out of the sidebar into ~/daily/_archive/ (moved,
+# never deleted; tune via ROLLOVER_IDLE_HOURS). Deterministic bash, no LLM, zero tokens.
 0 10,11  * * *  /home/roman/agent/agent-machinery/scripts/run-local.sh 03:00 /home/roman/agent/agent-machinery/scripts/daily-rollover.sh >> /home/roman/.agent-logs/cron.log 2>&1
 
 # ── WEEKLY ROLLUP — Monday 03:30 local, after the whole nightly cluster ──────

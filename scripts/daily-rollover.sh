@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# daily-rollover.sh — the daily workspace + Claude Code history hygiene.
+# daily-rollover.sh — the daily workspace + Claude Code sidebar hygiene.
 #
 # ══════════════════════════════════════════════════════════════════════════════
 # WHAT IT DOES (two jobs, one nightly pass, NO LLM — pure deterministic bash):
@@ -9,10 +9,17 @@
 #      to it. It is NOT a copy of any code — code lives in ~/agent/codebases/. The folder
 #      is the desk; what gets FILED is the day's log (see below).
 #
-#   2. Archives STALE Claude Code session histories out of the sidebar:
-#      ~/.claude/projects/<session>  →  ~/daily/_archive/<session>
-#      Every folder ever opened leaves a history entry that piles up on the left. This
-#      sweeps the old ones so the sidebar collapses to ~today.
+#   2. Archives STALE *conversations* out of the Claude Code sidebar:
+#      ~/.claude/projects/<project>/<uuid>.jsonl  →  ~/daily/_archive/<project>/<uuid>.jsonl
+#      The left panel lists one entry per conversation transcript. They pile up. This sweeps
+#      the old, already-logged ones so the panel collapses to just recent work.
+#
+#      PER-CONVERSATION, not per-project (changed 2026-07-24). The old version archived a
+#      whole project dir only when EVERY chat in it was stale — so a project used daily
+#      (agent, daily) kept its ENTIRE pile pinned behind one fresh chat and never tidied.
+#      Now each conversation is judged on its own, so a live project collapses to its
+#      recent chats while staying open. A conversation is <uuid>.jsonl PLUS an optional
+#      <uuid>/ sidecar dir (subagent transcripts); both move together.
 #
 # WHY THIS ISN'T THE JOURNAL: the journal (nightly-journal.sh) SUMMARIZES each day's chats
 # into my-context/logs/YYYY-MM-DD.md — that already exists and is the durable per-day record
@@ -21,14 +28,15 @@
 # THEN this rollover (03:00) so nothing is archived before it's been logged.
 #
 # ── THE SAFETY MODEL (why this can't eat un-logged work) ──────────────────────
-# A session dir is archived ONLY if BOTH hold:
-#   (a) its newest transcript is idle >= 48h — so today's and yesterday's work, and the
-#       currently-ACTIVE session (mtime ~now), are never touched. 48h also tolerates up to
-#       two consecutive journal failures, which the weekly healthcheck would catch anyway.
-#   (b) its newest transcript predates the most recent log we wrote — i.e. it has already
-#       been journaled. If the journal stops firing, no new log appears, the cutoff stops
-#       advancing, and nothing new is ever archived. This is the literal "never archive an
-#       un-logged day" guarantee, not a proxy for it.
+# A conversation is archived ONLY if BOTH hold:
+#   (a) it is idle >= IDLE_HOURS (default 24h) — so the currently-ACTIVE chat, and anything
+#       you paused over lunch or overnight and might resume, is never yanked out from under
+#       you. Raise ROLLOVER_IDLE_HOURS to keep more days visible; lower it for a tighter panel.
+#   (b) its transcript predates the most recent log we wrote — i.e. it has already been
+#       journaled. nightly-journal reads from ~/.claude/projects, NOT from _archive, so
+#       archiving an un-journaled chat would drop it from the record forever. If the journal
+#       stops firing, no new log appears, the cutoff stops advancing, and nothing new is
+#       ever archived. This is the literal "never archive an un-logged chat" guarantee.
 # And archiving is a MOVE, never a delete — fully reversible, nothing leaves the disk.
 #
 # Run  `daily-rollover.sh --dry-run`  to see exactly what it WOULD archive, moving nothing.
@@ -45,6 +53,8 @@ CONTEXT_DIR="${CONTEXT_DIR:-$HOME/agent/my-context}"
 LOGDIR="$CONTEXT_DIR/logs"
 TODAY="$(date +%F)"
 NOW="$(date +%s)"
+IDLE_HOURS="${ROLLOVER_IDLE_HOURS:-24}"
+IDLE_SECS=$(( IDLE_HOURS * 3600 ))
 
 note() { echo "$(date '+%F %T') rollover: $*"; }
 
@@ -64,14 +74,14 @@ Today's Kairo workspace. Open it in VS Code (Remote-SSH) and talk to Kairo here.
 - Tonight's journal writes the durable summary of today's chats to:
   \`my-context/logs/$TODAY.md\`  — What happened / Decisions / Open loops.
   That log is what Kairo reads to keep learning you; this folder is just the desk.
-- Older Claude Code histories are swept out of the sidebar to \`$ARCHIVE/\`
+- Older, already-logged conversations are swept out of the sidebar to \`$ARCHIVE/\`
   (moved, never deleted).
 - Code you actually edit lives in \`~/agent/codebases/\` — open those folders to code.
 EOF
   note "created workspace: $DAYDIR"
 fi
 
-# ── 2. ARCHIVE STALE SESSION HISTORIES ────────────────────────────────────────
+# ── 2. ARCHIVE STALE CONVERSATIONS (per-chat, so an ACTIVE project still tidies) ─
 if [[ ! -d "$PROJECTS" ]]; then
   note "no $PROJECTS — nothing to archive."; exit 0
 fi
@@ -90,28 +100,33 @@ moved=0; kept=0
 shopt -s nullglob
 for dir in "$PROJECTS"/*/; do
   dir="${dir%/}"
-  name="$(basename "$dir")"
-  newest="$(find "$dir" -name '*.jsonl' -printf '%T@\n' 2>/dev/null | sort -nr | head -1)"
-  if [[ -z "$newest" ]]; then
-    idle_days=999; predates_log=1          # empty/dead dir: safe to archive
-  else
-    newest="${newest%.*}"
-    idle_days=$(( (NOW - newest) / 86400 ))
-    predates_log=$(( newest < CUTOFF ? 1 : 0 ))
-  fi
+  proj="$(basename "$dir")"
+  for jsonl in "$dir"/*.jsonl; do
+    mt="$(stat -c %Y "$jsonl" 2>/dev/null)" || { kept=$((kept+1)); continue; }
+    idle_ok=$(( (NOW - mt) >= IDLE_SECS ? 1 : 0 ))
+    journaled=$(( mt < CUTOFF ? 1 : 0 ))
+    idle_h=$(( (NOW - mt) / 3600 ))
+    uuid="$(basename "$jsonl" .jsonl)"
 
-  if (( idle_days >= 2 && predates_log == 1 )); then
-    if [[ $DRY_RUN -eq 1 ]]; then
-      note "[dry-run] would archive: $name  (idle ${idle_days}d, already journaled)"
+    if (( idle_ok == 1 && journaled == 1 )); then
+      if [[ $DRY_RUN -eq 1 ]]; then
+        note "[dry-run] would archive chat: $proj/$uuid  (idle ${idle_h}h, already journaled)"
+      else
+        pdest="$ARCHIVE/$proj"; mkdir -p "$pdest"
+        # The transcript and its optional <uuid>/ sidecar dir move together.
+        for part in "$jsonl" "$dir/$uuid"; do
+          [[ -e "$part" ]] || continue
+          d="$pdest/$(basename "$part")"
+          [[ -e "$d" ]] && d="$pdest/$(basename "$part").$(date +%Y%m%d%H%M%S)"
+          mv "$part" "$d"
+        done
+        note "archived chat: $proj/$uuid  (idle ${idle_h}h)"
+      fi
+      moved=$((moved+1))
     else
-      dest="$ARCHIVE/$name"
-      [[ -e "$dest" ]] && dest="$ARCHIVE/${name}.$(date +%Y%m%d%H%M%S)"
-      if mv "$dir" "$dest"; then note "archived: $name  (idle ${idle_days}d)"; fi
+      kept=$((kept+1))
     fi
-    moved=$((moved+1))
-  else
-    kept=$((kept+1))
-  fi
+  done
 done
 
-note "done: $moved archived, $kept kept active$([[ $DRY_RUN -eq 1 ]] && echo '  (dry-run — nothing moved)')"
+note "done: $moved chat(s) archived, $kept kept active$([[ $DRY_RUN -eq 1 ]] && echo '  (dry-run — nothing moved)')"
