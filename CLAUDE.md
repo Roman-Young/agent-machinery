@@ -205,6 +205,11 @@ observed in a session
 - Draft, never send: emails and messages are prepared as drafts for the
   owner to approve. No exceptions until this line is changed.
 - Never delete data destructively; move to an archive or trash instead.
+  **One carve-out (owner's directive, 2026-07-24): raw session transcripts.** Headless runs
+  don't persist them at all, and interactive ones are archived to `~/daily/_archive/` then
+  purged after 14 days by `daily-rollover.sh` — by then their content is distilled into the
+  daily log → weekly rollup → insights chain, which IS the durable record. Do not "fix" that
+  purge as if it were a bug. Context files themselves are still never deleted.
 - Scheduled (headless) runs must stay within their prompt's scope — a
   morning brief reads and summarizes; it does not reorganize files.
 - If a run fails or something looks wrong, fail loudly (the wrapper

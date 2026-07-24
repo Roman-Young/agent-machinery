@@ -37,9 +37,14 @@
 #       archiving an un-journaled chat would drop it from the record forever. If the journal
 #       stops firing, no new log appears, the cutoff stops advancing, and nothing new is
 #       ever archived. This is the literal "never archive an un-logged chat" guarantee.
-# And archiving is a MOVE, never a delete — fully reversible, nothing leaves the disk.
+# Archiving is a MOVE — reversible. The ONE deletion in the whole system is step 3 below:
+# archived raw transcripts are purged after RETENTION_DAYS (default 14). Roman's directive
+# (2026-07-24): don't hoard raw transcripts — the durable record is the distilled chain
+# (daily log → weekly rollup → insights.md). By purge time a transcript has been journaled
+# (guard b) and weekly-rolled; the raw text is dead weight and PII surface. NOTE: mv
+# preserves mtime, so the 14 days count from the chat's LAST ACTIVITY, not from archiving.
 #
-# Run  `daily-rollover.sh --dry-run`  to see exactly what it WOULD archive, moving nothing.
+# Run  `daily-rollover.sh --dry-run`  to see exactly what it WOULD archive/purge, touching nothing.
 # ══════════════════════════════════════════════════════════════════════════════
 set -uo pipefail
 
@@ -130,3 +135,20 @@ for dir in "$PROJECTS"/*/; do
 done
 
 note "done: $moved chat(s) archived, $kept kept active$([[ $DRY_RUN -eq 1 ]] && echo '  (dry-run — nothing moved)')"
+
+# ── 3. RETENTION: purge distilled raw transcripts from _archive ───────────────
+# The one sanctioned deletion (see header). Everything here has already been journaled
+# (guard b gated its arrival) and weekly-rolled at least once by day 14.
+RETENTION_DAYS="${ROLLOVER_RETENTION_DAYS:-14}"
+if [[ -d "$ARCHIVE" ]]; then
+  if [[ $DRY_RUN -eq 1 ]]; then
+    n=$(find "$ARCHIVE" -type f -mtime +"$RETENTION_DAYS" 2>/dev/null | wc -l)
+    note "[dry-run] would purge $n archived file(s) older than ${RETENTION_DAYS}d"
+  else
+    purged=$(find "$ARCHIVE" -type f -mtime +"$RETENTION_DAYS" -print -delete 2>/dev/null | wc -l)
+    find "$ARCHIVE" -mindepth 1 -type d -empty -delete 2>/dev/null
+    if (( purged > 0 )); then
+      note "purged $purged archived file(s) older than ${RETENTION_DAYS}d (already distilled into logs/)"
+    fi
+  fi
+fi

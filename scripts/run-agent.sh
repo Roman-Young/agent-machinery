@@ -114,8 +114,15 @@ TIMEOUT_SEC="${AGENT_TIMEOUT_SEC:-600}"
 echo "[$(date -Is)] job=$JOB_NAME starting (run $COUNT/$MAX_RUNS_PER_DAY today, timeout ${TIMEOUT_SEC}s)" >> "$LOG_FILE"
 START=$(date +%s)
 
+# --no-session-persistence: headless runs used to leave a FULL transcript in
+# ~/.claude/projects/<cwd-slug>/ on every cron firing — 138 piled up in the my-context slug
+# in ~10 days, cluttering the interactive sidebar and feeding the nightly journal its own
+# jobs' droppings. Verified empirically 2026-07-24: with the flag no .jsonl is written;
+# without it, one is. A job's durable record is its OUTPUT in $LOG_FILE (below) — which
+# nightly-journal.sh now reads instead of headless transcripts.
 OUTPUT=$(timeout --kill-after=30s "$TIMEOUT_SEC" \
   claude -p "$PROMPT" \
+    --no-session-persistence \
     --allowedTools "${AGENT_ALLOWED_TOOLS:-Read,Glob,Grep}" \
     --max-turns "${AGENT_MAX_TURNS:-25}" \
     "$@" 2>>"$LOG_FILE")

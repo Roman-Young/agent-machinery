@@ -54,9 +54,10 @@ S=/home/roman/agent/agent-machinery/scripts
 # ── DAILY ROLLOVER — 03:00 local, LAST in the nightly cluster ────────────────
 # Runs AFTER journal (01:45) + maintenance (02:00) + backup (02:15), so the day is fully
 # logged and backed up before anything is archived. Creates today's ~/daily/YYYY-MM-DD/
-# workspace and sweeps individual already-journaled conversations idle >=24h (per-chat, so
-# an actively-used project still tidies) out of the sidebar into ~/daily/_archive/ (moved,
-# never deleted; tune via ROLLOVER_IDLE_HOURS). Deterministic bash, no LLM, zero tokens.
+# workspace, sweeps individual already-journaled conversations idle >=24h (per-chat, so an
+# actively-used project still tidies) out of the sidebar into ~/daily/_archive/, and purges
+# archived raw transcripts >14d old (distilled by then into daily log + weekly rollup — the
+# durable record; Roman 2026-07-24). Knobs: ROLLOVER_IDLE_HOURS, ROLLOVER_RETENTION_DAYS.
 0 10,11  * * *  /home/roman/agent/agent-machinery/scripts/run-local.sh 03:00 /home/roman/agent/agent-machinery/scripts/daily-rollover.sh >> /home/roman/.agent-logs/cron.log 2>&1
 
 # ── WEEKLY ROLLUP — Monday 03:30 local, after the whole nightly cluster ──────

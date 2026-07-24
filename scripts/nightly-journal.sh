@@ -30,13 +30,26 @@ mapfile -t FILES < <(
        -name '*.jsonl' -mtime -1 -size +2k 2>/dev/null | head -30
 )
 
-if [[ ${#FILES[@]} -eq 0 ]]; then
-  echo "No session transcripts in the last 24h — nothing to journal. Exiting cleanly."
+# SECOND SOURCE (added 2026-07-24): the day's HEADLESS job outputs. run-agent.sh now passes
+# --no-session-persistence, so scheduled runs (triage, brief, maintenance…) leave NO
+# transcript in ~/.claude/projects — their record is the per-job output log run-agent.sh
+# writes. Without this source, a day with no interactive sessions would journal as "nothing
+# happened" while the automations all ran. (Job logs are named YYYY-MM-DD-<job>.log.)
+mapfile -t JOBLOGS < <(
+  find "${AGENT_LOG_DIR:-$HOME/.agent-logs}" -maxdepth 1 -type f \
+       -name '20*-*.log' -mtime -1 2>/dev/null | head -20
+)
+
+if [[ ${#FILES[@]} -eq 0 && ${#JOBLOGS[@]} -eq 0 ]]; then
+  echo "No transcripts or job logs in the last 24h — nothing to journal. Exiting cleanly."
   exit 0
 fi
 
-FILE_LIST=$(printf '  - %s\n' "${FILES[@]}")
-echo "Journaling from ${#FILES[@]} transcript(s)."
+FILE_LIST="  (none — no interactive sessions in the last 24h)"
+[[ ${#FILES[@]} -gt 0 ]] && FILE_LIST=$(printf '  - %s\n' "${FILES[@]}")
+JOBLOG_LIST="  (none — no scheduled jobs ran in the last 24h)"
+[[ ${#JOBLOGS[@]} -gt 0 ]] && JOBLOG_LIST=$(printf '  - %s\n' "${JOBLOGS[@]}")
+echo "Journaling from ${#FILES[@]} transcript(s) + ${#JOBLOGS[@]} job log(s)."
 
 export AGENT_ALLOWED_TOOLS="Read,Glob,Grep,Edit,Write,Bash(git diff *),Bash(git log *),Bash(git status *)"
 export AGENT_MAX_TURNS=40
@@ -49,6 +62,11 @@ TODAY'S SESSION TRANSCRIPTS — read these with the Read tool (they are JSONL, o
 object per line; they may be large, so read in chunks and skim for substance rather than
 reading every line):
 $FILE_LIST
+
+TODAY'S SCHEDULED-JOB OUTPUT LOGS — read these too. Each is a headless job's own output
+(triage decisions, brief content, maintenance actions). Record what the automations DID,
+briefly — routine no-op runs ('no new mail', 'nothing stale') get at most one line total:
+$JOBLOG_LIST
 
 ALSO read:
 - git diff and git log for today in this repo (what actually changed on disk).
