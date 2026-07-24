@@ -42,6 +42,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
+# The tasks.md re-render at the end of this script runs OUTSIDE run-agent.sh (which sources
+# .env in its own subshell), so THIS script needs CONTEXT_DIR in its own environment. Without
+# it, render-tasks.py falls back to ./tasks.yaml — absent from cron's cwd — and EVERY hourly
+# run fired a bogus "render-tasks failed" alert. Root-caused 2026-07-24. (.env holds secrets,
+# but also the paths; sourcing it here is how the wrapper and nightly-maintenance both get them.)
+if [[ -f "$REPO_DIR/.env" ]]; then
+  # shellcheck disable=SC1091
+  source "$REPO_DIR/.env"
+fi
+
 # Read Gmail, label Gmail, read/append tasks.yaml. NO send, NO delete, NO archive, NO Bash.
 # create_draft is deliberately ABSENT — triage classifies, it does not write replies.
 # The renderer is run by THIS script afterward, so the agent never needs Bash.
@@ -126,7 +136,9 @@ $OUT"
 fi
 
 # ── Re-render tasks.md if the agent appended anything (agent has no Bash of its own). ──
-if python3 "$SCRIPT_DIR/render-tasks.py" >/dev/null 2>&1; then
+# Pass the yaml path EXPLICITLY (like nightly-maintenance) — never rely on cwd or an env
+# default; that was the "render failed every hour" bug.
+if python3 "$SCRIPT_DIR/render-tasks.py" "${CONTEXT_DIR:-$REPO_DIR/../my-context}/tasks.yaml" >/dev/null 2>&1; then
   :
 else
   "$SCRIPT_DIR/notify.sh" alert "⚠️ Triage: render-tasks failed" \
