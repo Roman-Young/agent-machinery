@@ -32,7 +32,7 @@ SERVER="${SERVER:-roman@46.224.54.65}"
 PROJECTS=(
   "$HOME/Desktop/PEPMatch2.0"
   # "$HOME/Desktop/LabReach"
-  # "$HOME/Desktop/***REMOVED***"
+  # "$HOME/Desktop/<workspace>"
 )
 
 REMOTE_CODE="agent/mac-mirror"

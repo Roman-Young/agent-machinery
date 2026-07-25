@@ -10,9 +10,9 @@
 #             · a deadline due TODAY or TOMORROW (~48h), OR
 #             · a late / past-due / overdue notice (esp. housing & money), OR
 #             · a work email from a key person carrying SUBSTANTIVE info or a concrete
-#               task/decision/data (Dan's "fix it + PR", not Eduard's "when are you free"),
+#               task/decision/data (a PI's "fix it + PR", not a "when are you free?"),
 #             · a job/recruiter/interview reply THAT asks for a same/next-day response.
-#   reply   — needs a reply, but no clock on it. (Eduard scheduling; a networking reply.)
+#   reply   — needs a reply, but no clock on it. (a scheduling email; a networking reply.)
 #   action  — YOU must DO something (not reply): upload, pay, register, sign a form.
 #             No same/next-day deadline — if it had one, it'd be URGENT.
 #   other   — notifications/updates worth keeping but not pushing.
@@ -69,10 +69,10 @@ OUT=$("$SCRIPT_DIR/run-agent.sh" email-triage \
 "You are Kairo, triaging Roman's PERSONAL Gmail inbox. Now: $(date +'%A %B %d, %Y %H:%M').
 
 READ FIRST, from the context repo:
-- me.md  -> the table of PEOPLE / EMAIL SENDERS that matter (***REMOVED***, ***REMOVED***,
-           ***REMOVED***, ***REMOVED***, ***REMOVED***, ***REMOVED***), the
-           FAMILY table (Mom ***REMOVED***@, Dad ***REMOVED***@, Brother ***REMOVED***@ — NEVER
-           below 'reply'), and the note on which inboxes you can see. Use it; don't guess.
+- me.md  -> the PEOPLE / EMAIL SENDERS table (colleagues who matter) and the FAMILY
+           table (family senders are NEVER classified below 'reply'), plus the note on
+           which inboxes you can see. Read the actual names/addresses there — this public
+           script must not contain them. Use the table; don't guess.
 - tasks.yaml -> so you can APPEND tasks (below). Read meta.next_id.
 
 STEP 1 — LABELS. Call list_labels. Ensure these labels exist; create_label any that don't:
