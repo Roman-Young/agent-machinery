@@ -103,7 +103,12 @@ if ! flock -n 9; then
   echo "[$(date -Is)] job=$JOB_NAME SKIPPED — a previous run is still going" >> "$LOG_FILE"
   notify "⚠️ $JOB_NAME skipped" \
     "A previous '$JOB_NAME' run is STILL RUNNING and blocked this one. If that keeps happening, a run is hung — check ~/.agent-logs/."
-  exit 0   # not an error: skipping is the correct behaviour
+  # Exit 75 (EX_TEMPFAIL), NOT 0. Skipping is not an error for a cron job — but it is
+  # NOT the same as "the work got done." A caller that must know whether the agent
+  # actually ran (e.g. process-outbox, which ledgers requests as applied on success)
+  # would treat exit 0 as "applied" and silently drop the requests this run never
+  # touched. 75 says "did not run, retry next time"; cron ignores it, callers can branch.
+  exit 75
 fi
 
 cd "$CONTEXT_DIR"   # run from the context repo so CLAUDE.md + relative paths resolve

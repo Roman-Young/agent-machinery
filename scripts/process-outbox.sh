@@ -91,9 +91,23 @@ Reply with ONE line per request saying what you did.")
 RC=$?
 
 if [[ $RC -eq 0 ]]; then
+  # SUCCESS — the agent actually ran and applied the requests. Only NOW do we ledger
+  # them as processed. (Belt-and-suspenders: a zero exit with empty output would be
+  # suspicious, so guard on that too — never ledger against a run that produced nothing.)
+  if [[ -z "${OUT//[[:space:]]/}" ]]; then
+    echo "$(date -Is) outbox: rc=0 but EMPTY output — NOT ledgering, will retry next run"
+    "$SCRIPT_DIR/notify.sh" fyi "⚠️ outbox: empty result, requests kept pending" "rc=0 but the apply agent returned no output; ${#PENDING[@]} request(s) left for the next run." >/dev/null 2>&1 || true
+    exit 0
+  fi
   for f in "${PENDING[@]}"; do basename "$f" >> "$LEDGER"; done
   echo "$OUT"
   "$SCRIPT_DIR/notify.sh" fyi "📥 Applied ${#PENDING[@]} request(s) from VS Code" "$OUT" >/dev/null 2>&1 || true
+elif [[ $RC -eq 75 ]]; then
+  # SKIPPED — a previous process-outbox run still holds the lock; the agent never ran.
+  # This is the bug we fixed: exit 75 (not 0) means DO NOT ledger. The requests are
+  # untouched and will be picked up on the next run. Not a failure, so exit 0 quietly.
+  echo "$(date -Is) outbox: SKIPPED (previous run still holding lock) — ${#PENDING[@]} request(s) left pending, no ledger write"
+  exit 0
 else
   # Do NOT mark as processed — a failed apply must be retried, never silently dropped.
   echo "$(date -Is) outbox: FAILED (rc=$RC) — requests left pending for the next run"
