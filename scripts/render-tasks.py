@@ -15,6 +15,7 @@ Usage:
 """
 import sys
 import os
+import re
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -83,14 +84,103 @@ def render_done_line(t):
     return f"- **{t.get('done_date', '?')}** — {idpart} **{t['title']}** → {notes}"
 
 
+TASK_ID_RE = re.compile(r"\bT\d+\b")
+STALE_DAYS = 14  # an open task this far past due, unmentioned, is a reconciliation candidate
+
+
+def _load_text(path):
+    """Read a sibling context file if present; missing/unreadable -> '' (lint is best-effort)."""
+    try:
+        with open(path) as f:
+            return f.read()
+    except OSError:
+        return ""
+
+
+def context_lint(data, yaml_path):
+    """Deterministic cross-file consistency checks. Pure function of tasks.yaml +
+    (read-only) sibling context files. Returns a list of finding strings — the MECHANICAL
+    half of reconciliation, so the nightly LLM step only has to adjudicate what's flagged,
+    not scan every file. Never mutates anything. Same philosophy as the renderer itself:
+    a script does the exact-comparison work, the model does the judgment work."""
+    ctx = os.path.dirname(os.path.abspath(yaml_path))
+    open_tasks = data.get("tasks", []) or []
+    done_tasks = data.get("done", []) or []
+    done_ids = {t.get("id") for t in done_tasks if t.get("id")}
+    td = today()
+    findings = []
+
+    # 1. Answered open-questions: a task referenced in the STILL-OPEN part of
+    #    open-questions.md that is already in done: -> the question is drainable.
+    oq = _load_text(os.path.join(ctx, "open-questions.md"))
+    if oq:
+        active = re.split(r"(?im)^#+\s*.*answered", oq)[0]  # inspect only pre-"Answered" text
+        refs = set(TASK_ID_RE.findall(active))
+        for tid in sorted(refs & done_ids):
+            findings.append(
+                f"[drain] open-questions.md still lists a question tied to {tid}, "
+                f"which is DONE — move it to the Answered section with a pointer."
+            )
+
+    # 2. Pointer drift in current.md: under the single-source model, current.md POINTS at
+    #    live tasks; it must not narrate a DONE task as if it were still live. (We do NOT
+    #    flag "references a task without repeating its due date" — a pointer omitting the
+    #    date is correct, not drift; the date lives in tasks.yaml.)
+    cur = _load_text(os.path.join(ctx, "current.md"))
+    if cur:
+        # line-by-line so a legitimate pointer ("old T59 is closed", a "do NOT sweep
+        # T2/T3" hold-note) is distinguished from stale live-narration.
+        done_kw = re.compile(r"\b(done|closed|superseded|archiv|swept|sweep|finished|complete)", re.I)
+        cur_lines = cur.splitlines()
+        for tid in sorted(set(TASK_ID_RE.findall(cur)) & done_ids):
+            lines_with = [ln for ln in cur_lines if tid in TASK_ID_RE.findall(ln)]
+            if any(not done_kw.search(ln) for ln in lines_with):
+                findings.append(
+                    f"[drift] current.md narrates {tid} (DONE) as if live — "
+                    f"make it a pointer or drop it."
+                )
+
+    # 3. Long-overdue stale candidates (from tasks.yaml alone, fully deterministic).
+    for t in open_tasks:
+        d = parse_due(t.get("due"))
+        if d and (td - d).days >= STALE_DAYS:
+            findings.append(
+                f"[stale] {t.get('id')} '{t.get('title')}' is {(td - d).days} days past "
+                f"due ({t['due']}) and still open — close, reschedule, or confirm."
+            )
+
+    return findings
+
+
+def print_lint(findings, stream=sys.stdout):
+    if not findings:
+        print("context-lint: clean", file=stream)
+        return
+    print(f"context-lint: {len(findings)} finding(s)", file=stream)
+    for f in findings:
+        print(f"  - {f}", file=stream)
+
+
 def main():
-    yaml_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
+    args = sys.argv[1:]
+    lint_only = False
+    if args and args[0] == "--lint":
+        lint_only = True
+        args = args[1:]
+
+    yaml_path = args[0] if args else os.path.join(
         os.environ.get("CONTEXT_DIR", "."), "tasks.yaml"
     )
     md_path = os.path.join(os.path.dirname(yaml_path), "tasks.md")
 
     with open(yaml_path) as f:
         data = yaml.safe_load(f)
+
+    if lint_only:
+        # Read-only mode for the nightly reconciliation step: emit the report on stdout,
+        # write nothing. Never let a lint bug break a render — this path doesn't touch md.
+        print_lint(context_lint(data, yaml_path), stream=sys.stdout)
+        return
 
     meta = data.get("meta", {})
     open_tasks = [t for t in data.get("tasks", [])]
@@ -178,6 +268,15 @@ def main():
 
     print(f"rendered {len(open_tasks)} open ({overdue_count} overdue), "
           f"{len(done_tasks)} done -> {md_path}")
+
+    # Surface consistency findings on stderr (never fatal). A caller that wants the full
+    # machine-readable report calls `render-tasks.py --lint`.
+    try:
+        findings = context_lint(data, yaml_path)
+        if findings:
+            print_lint(findings, stream=sys.stderr)
+    except Exception as e:  # lint must never break a render
+        print(f"context-lint: skipped ({e})", file=sys.stderr)
 
 
 if __name__ == "__main__":

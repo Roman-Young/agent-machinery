@@ -76,8 +76,9 @@ else
 
 Today's Kairo workspace. Open it in VS Code (Remote-SSH) and talk to Kairo here.
 
-- Tonight's journal writes the durable summary of today's chats to:
-  \`my-context/logs/$TODAY.md\`  — What happened / Decisions / Open loops.
+- Tonight's journal writes the durable summary of today's chats to
+  \`my-context/logs/$TODAY.md\`, and it appears HERE as \`$TODAY-log.md\`
+  once it exists — What happened / Decisions / Open loops. Full history: \`../logs/\`.
   That log is what Kairo reads to keep learning you; this folder is just the desk.
 - Older, already-logged conversations are swept out of the sidebar to \`$ARCHIVE/\`
   (moved, never deleted).
@@ -85,6 +86,23 @@ Today's Kairo workspace. Open it in VS Code (Remote-SSH) and talk to Kairo here.
 EOF
   note "created workspace: $DAYDIR"
 fi
+
+# ── 1b. LINK EACH DAY'S LOG INTO ITS WORKSPACE ────────────────────────────────
+# The day folder is where Roman looks for "what happened that day" (2026-07-25 —
+# he opened ~/daily expecting the record and found only the README). Put the log
+# where he looks: symlink logs/<day>.md into <day>/. Idempotent, covers every day
+# folder (so it backfills old ones), and skips days whose log doesn't exist yet —
+# the next nightly run picks those up (journal fires at 01:45, before this).
+for d in "$DAILY_HOME"/20*/; do
+  day="$(basename "${d%/}")"
+  [[ -f "$LOGDIR/$day.md" && ! -e "$d$day-log.md" ]] || continue
+  if [[ $DRY_RUN -eq 1 ]]; then
+    note "[dry-run] would link log into $day/"
+  else
+    ln -s "$LOGDIR/$day.md" "$d$day-log.md"
+    note "linked log into $day/"
+  fi
+done
 
 # ── 2. ARCHIVE STALE CONVERSATIONS (per-chat, so an ACTIVE project still tidies) ─
 if [[ ! -d "$PROJECTS" ]]; then

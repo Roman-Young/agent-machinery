@@ -103,6 +103,14 @@ remember:
 - **Never let a task exist in two files.** That is how the list becomes untrustworthy,
   and an untrusted list is worse than none — he'll go back to keeping it in his head,
   which is the exact problem this system exists to solve.
+- **Point at tasks; don't restate their state.** `tasks.yaml` is the sole owner of live
+  task/deadline state. When a prose file (`current.md`, `projects-*.md`, `open-questions.md`)
+  needs to reference a task, write a **pointer** — the task id in the text, e.g.
+  "Live tracker: T69" — and keep only the durable *why* (the science, the stake) around it.
+  Do NOT copy the status, due date, or "awaiting X" into prose; that copy is what drifts.
+  The task id in the text is also what the reconciler keys on (see below), so the pointer
+  is load-bearing, not decoration. (Model to copy: `current.md` names the active term once
+  and every other file points at it — `courses/README.md`.)
 - **Surface staleness.** If a task has been open for a long time, or a 🔴 item is going
   quiet, say so — unprompted. He built this specifically because things slip.
 - **Every task should say why it matters**, not just what it is. A bare imperative is a
@@ -132,6 +140,16 @@ remember:
   the memory rots.
 - Daily logs: append to `$CONTEXT_DIR/logs/YYYY-MM-DD.md` using the
   existing section shape (What happened / Decisions / Open loops).
+- **Nightly reconciliation (automated, 2026-07-25).** `nightly-maintenance.sh` (02:00, after
+  the journal) now reconciles the day's evidence, not just strikes passed dates. It runs
+  `render-tasks.py --lint` first — a deterministic check for drain/drift/stale candidates —
+  then, on **unambiguous evidence only**, closes tasks the day's log shows finished, repoints
+  prose that restates a task's status, and drains open-questions whose task is done. Anything
+  short of explicit gets flagged under `## Needs Roman (reconciliation)` in the day's log +
+  the phone summary; every change is one reversible `maint:` commit. Autonomy contract: auto-
+  apply the unambiguous, flag the rest — never guess at 2am. So when you finish a task or ship
+  a change in a session, **write it into the day's log explicitly** ("shipped/sent/merged/done
+  T-nn"); that explicit phrasing is what lets the reconciler close it for you.
 - Never write secrets (keys, passwords, tokens) into any context file.
 - Content marked for `local-only/` stays in `local-only/` — never copy
   or summarize it into tracked files.
