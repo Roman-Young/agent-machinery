@@ -70,9 +70,9 @@ $JOBLOG_LIST
 
 ALSO read:
 - git diff and git log for today in this repo (what actually changed on disk).
-- logs/$TODAY.md if it already exists. APPEND to it; never clobber what's there.
+- logs/daily/$TODAY.md if it already exists. APPEND to it; never clobber what's there.
 
-WRITE logs/$TODAY.md using the existing section shape:
+WRITE logs/daily/$TODAY.md using the existing section shape:
   ## What happened   — concise and factual. SUMMARIZE, do not transcribe.
   ## Decisions       — each with its reasoning.
   ## Open loops      — what's unfinished, and what is going stale.

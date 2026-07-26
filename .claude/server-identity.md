@@ -32,7 +32,7 @@ Then follow the **session-start procedure** defined in `__WS__/agent-machinery/C
 exactly as if this were the workspace root — read the durable layer (`$CONTEXT_DIR/soul.md`,
 `me.md`, `goals.md`, `insights.md`), the live layer (`current.md`), the detail files, the two
 most recent weekly rollups in `$CONTEXT_DIR/logs/weekly/`, and the three most recent daily
-logs in `$CONTEXT_DIR/logs/` — before addressing the task.
+logs in `$CONTEXT_DIR/logs/daily/` — before addressing the task.
 
 The code you work on lives in `__WS__/codebases/`; the memory you read and write lives in
 `__WS__/my-context/`. Both are reachable from here — you are on the same server.

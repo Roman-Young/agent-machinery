@@ -257,7 +257,7 @@ def main():
     lines.append("")
     lines.append("## ✅ Done")
     lines.append("")
-    lines.append("*Newest first. Never deleted. Full narrative for any entry lives in `logs/`.*")
+    lines.append("*Newest first. Never deleted. Full narrative for any entry lives in `logs/daily/`.*")
     lines.append("")
     for t in sorted(done_tasks, key=lambda t: t.get("done_date", ""), reverse=True):
         lines.append(render_done_line(t))

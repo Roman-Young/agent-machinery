@@ -40,7 +40,7 @@ READ FIRST, from the context repo:
 - current.md (the term, schedule, open decisions, watch list)
 - me.md      -> the section listing the PEOPLE and EMAIL SENDERS that matter, and which
                of his inboxes are actually visible to you. Use that list; do not guess.
-- today's and yesterday's files in logs/
+- today's and yesterday's files in logs/daily/
 
 THEN CHECK, in this order:
 1. Gmail. Search 'newer_than:1d', plus 'is:starred newer_than:7d', plus any labels

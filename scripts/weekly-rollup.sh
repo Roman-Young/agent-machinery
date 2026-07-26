@@ -63,7 +63,7 @@ fi
 DAILIES=()
 for i in 0 1 2 3 4 5 6; do
   D=$(date -d "$MONDAY + $i days" +%F)
-  [[ -f "$CONTEXT_DIR/logs/$D.md" ]] && DAILIES+=("logs/$D.md")
+  [[ -f "$CONTEXT_DIR/logs/daily/$D.md" ]] && DAILIES+=("logs/daily/$D.md")
 done
 
 if [[ ${#DAILIES[@]} -eq 0 ]]; then

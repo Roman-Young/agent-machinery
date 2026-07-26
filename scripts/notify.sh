@@ -50,10 +50,16 @@ TOPIC="$NTFY_TOPIC"
 [[ "$TIER" == "fyi"    && -n "${NTFY_TOPIC_FYI:-}"    ]] && TOPIC="$NTFY_TOPIC_FYI"
 [[ "$TIER" == "urgent" && -n "${NTFY_TOPIC_URGENT:-}" ]] && TOPIC="$NTFY_TOPIC_URGENT"
 
+# Optional scheduled delivery: NOTIFY_DELAY="8am" (or "30s", "2h", epoch) uses ntfy's
+# Delay header so a 3am cron job can speak at a human hour. Unset = deliver now.
+DELAY_ARGS=()
+[[ -n "${NOTIFY_DELAY:-}" ]] && DELAY_ARGS=(-H "Delay: $NOTIFY_DELAY")
+
 # --fail so a non-2xx is an error, not a silent success.
 if curl -fsS \
       -H "Title: $TITLE" \
       -H "Markdown: yes" \
+      "${DELAY_ARGS[@]}" \
       -d "$MESSAGE" \
       "$NTFY_URL/$TOPIC" >/dev/null; then
   echo "notified ($TIER): $TITLE"

@@ -20,7 +20,7 @@ before acting.
      invent an answer to something on this list; surface the 🔴 items proactively).
 2. Read the **two most recent files in `$CONTEXT_DIR/logs/weekly/`** (the condensed
    weekly tier — ~2.5 weeks of coverage), then the **three most recent daily logs** in
-   `$CONTEXT_DIR/logs/` for recency. If a loaded weekly has an `## Insight candidates`
+   `$CONTEXT_DIR/logs/daily/` for recency. If a loaded weekly has an `## Insight candidates`
    section, treat those as pending proposals: raise them with the owner when relevant
    (propose-and-wait — never silently promote them to `insights.md`).
 3. **Load on demand — never at session start** (this is what keeps startup cheap):
@@ -32,7 +32,7 @@ before acting.
      to work from; it is enough to know *that you need to go read the briefing*.
    - `local-only/` — same, for sensitive material. Gitignored; never copy content out.
    - `archive/` — only when researching something that already ended.
-   - **older `logs/` + `logs/weekly/` history** — when asked to look further back in
+   - **older `logs/daily/` + `logs/weekly/` history** — when asked to look further back in
      time: find the period via the weekly rollups (52/year, cheap to scan), then drill
      into that week's daily logs. Everything is kept forever; only the recent slice
      loads by default.
@@ -130,7 +130,7 @@ remember:
   stays true for years — never write a date, a deadline, or a "right now"
   into them. Anything time-bound goes in `current.md`. Review `current.md`
   at every term boundary and whenever a deadline in it passes; archive
-  expired items into `logs/` rather than leaving them to rot. If something
+  expired items into `logs/daily/` rather than leaving them to rot. If something
   in `current.md` is still there a year later, it was never ephemeral —
   promote it.
 - **Never name an ephemeral thing in a durable file.** A course, a deadline, a
@@ -138,7 +138,7 @@ remember:
   *instance*. (E.g. the class-stakes rule lives in `me.md`; which class is
   high-stakes lives in that course's folder.) This is the single most common way
   the memory rots.
-- Daily logs: append to `$CONTEXT_DIR/logs/YYYY-MM-DD.md` using the
+- Daily logs: append to `$CONTEXT_DIR/logs/daily/YYYY-MM-DD.md` using the
   existing section shape (What happened / Decisions / Open loops).
 - **Nightly reconciliation (automated, 2026-07-25).** `nightly-maintenance.sh` (02:00, after
   the journal) now reconciles the day's evidence, not just strikes passed dates. It runs
@@ -194,7 +194,7 @@ learned and left further back is functionally forgotten. So a lesson has to be
 
 ```
 observed in a session
-   → written to logs/YYYY-MM-DD.md          (always — the raw record)
+   → written to logs/daily/YYYY-MM-DD.md    (always — the raw record)
    → distilled into logs/weekly/YYYY-Www.md (every Monday, by weekly-rollup.sh — the
      middle tier; its ## Insight candidates section is where recurrence gets noticed)
    → if it RECURS, promote to insights.md   (the durable-learning layer, read every

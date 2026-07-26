@@ -71,7 +71,7 @@ export PUSH_OUTPUT=1   # summarise the night's cleanup to the phone
 "You are Kairo doing end-of-day memory hygiene AND reconciliation. Today is $TODAY. Be
 CONSERVATIVE — you run unsupervised at night. The autonomy contract (Roman, 2026-07-25):
 AUTO-APPLY only UNAMBIGUOUS changes (each is a reversible git commit); everything that needs
-judgment goes to '## Needs Roman (reconciliation)' in logs/$TODAY.md — DO NOT guess.
+judgment goes to '## Needs Roman (reconciliation)' in logs/daily/$TODAY.md — DO NOT guess.
 
 ⚠️ tasks.md is ALREADY regenerated from tasks.yaml (overdue-flagging is deterministic in that
 render — never compute overdue yourself, never hand-edit tasks.md; it's overwritten on render).
@@ -86,11 +86,11 @@ Do these, in order:
 
 1. current.md — any dated line whose date is now PAST:
    - Strike it through and add '(passed $TODAY)'. Do NOT delete it.
-   - If it was purely ephemeral (a one-time event that's over), MOVE it into logs/$TODAY.md
+   - If it was purely ephemeral (a one-time event that's over), MOVE it into logs/daily/$TODAY.md
      under '## Expired from current.md', then remove it from current.md (git preserves it).
    - Update current.md's 'Last reviewed:' line to $TODAY.
 
-2. RECONCILE — close tasks the day's log PROVES done. Read logs/$TODAY.md (today's journal)
+2. RECONCILE — close tasks the day's log PROVES done. Read logs/daily/$TODAY.md (today's journal)
    and today's git diff. For any open task the log EXPLICITLY states finished — shipped /
    merged / sent / submitted / signed / paid / 'done' — move it tasks:->done: in tasks.yaml,
    set done_date: $TODAY, TRIM notes to a one-line summary. EVIDENCE GATE: 'worked on',
@@ -116,7 +116,7 @@ Do these, in order:
      no open task references it), distill into archive/courses/<term>-<course>.md (template in
      courses/README.md) and REMOVE those done entries. If unsure it's finished, DO NOT sweep — flag.
 
-6. Anything else AMBIGUOUS — do NOT guess; add a short bullet to logs/$TODAY.md under
+6. Anything else AMBIGUOUS — do NOT guess; add a short bullet to logs/daily/$TODAY.md under
    '## Needs Roman (reconciliation)' and move on.
 
 If tasks.yaml changed at all, re-render: python3 \"$SCRIPT_DIR/render-tasks.py\" \"\$CONTEXT_DIR/tasks.yaml\"
