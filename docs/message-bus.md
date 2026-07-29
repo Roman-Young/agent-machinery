@@ -101,7 +101,7 @@ untrusted content**").
 
 ## Phase 2 — milestone-gated spawning (BUILT + verified 2026-07-20)
 
-`spawn-agent.sh <thread-id> [--tools …] [--label …] [--dir …]` runs ONE milestone of a
+`spawn-agent.sh <thread-id> [--tools …] [--label …] [--dir …] [--tier cheap|deep]` runs ONE milestone of a
 deep-work agent for a thread, then stops. Two calls shaped it: **manual continuation**
 (nothing continues without approval) and **orchestrator-only** (only Kairo spawns; a worker
 can't spawn workers).

@@ -67,11 +67,12 @@ done
 # P6 — model tiering: resolve the tier to a model (explicit --model overrides). Cheap by default;
 # escalate to deep only for hard milestones per the rubric in docs/message-bus.md. Models are
 # env-overridable so the mapping isn't hardcoded to today's model names.
+# Validate the tier unconditionally (even when --model overrides it) so a typo is never silent.
+case "$TIER" in cheap|deep) ;; *) echo "🔴 spawn-agent: --tier must be 'cheap' or 'deep' (got '$TIER')"; exit 2;; esac
 if [[ -z "$MODEL" ]]; then
   case "$TIER" in
     cheap) MODEL="${AGENT_MODEL_CHEAP:-sonnet}";;
     deep)  MODEL="${AGENT_MODEL_DEEP:-opus}";;
-    *) echo "🔴 spawn-agent: --tier must be 'cheap' or 'deep' (got '$TIER')"; exit 2;;
   esac
 fi
 # Refuse Bash/push/send in a spawned worker — the trust boundary is not optional.
@@ -148,8 +149,19 @@ BODY="$(printf '%s' "$LINE" | sed -E 's/^<<BUS [a-z_]+>> ?//')"
 
 # P2 approval protocol: if the worker surfaced an irreversible artifact for approval, capture it
 # VERBATIM (the single-line status parser above would otherwise truncate a multi-line draft/diff).
-# The markers themselves are stripped; only the content between them is carried onto the bus.
-ARTIFACT="$(printf '%s\n' "$OUT" | sed -n '/-----BEGIN ARTIFACT-----/,/-----END ARTIFACT-----/{/-----\(BEGIN\|END\) ARTIFACT-----/d;p;}')"
+# The markers themselves are stripped; only the content between them is carried onto the bus. Require
+# BOTH markers — an unmatched BEGIN would otherwise let the sed range run to EOF and swallow the tail.
+ARTIFACT=""
+if printf '%s\n' "$OUT" | grep -q -- '-----BEGIN ARTIFACT-----' \
+   && printf '%s\n' "$OUT" | grep -q -- '-----END ARTIFACT-----'; then
+  ARTIFACT="$(printf '%s\n' "$OUT" | sed -n '/-----BEGIN ARTIFACT-----/,/-----END ARTIFACT-----/{/-----\(BEGIN\|END\) ARTIFACT-----/d;p;}')"
+fi
+
+# P5: relay any worker-surfaced skill candidate onto the bus so it is NOT silently dropped — the
+# worker prompt promises it "rides your report to the bus". The orchestrator surfaces it to Roman
+# (propose-and-wait; workers never write skills). Independent of the status line's kind.
+SKILLC="$(printf '%s\n' "$OUT" | grep -iE '^[[:space:]]*skill-candidate:' || true)"
+[[ -n "$SKILLC" ]] && "${BUS[@]}" write "$THREAD" --kind note --by "$LABEL" "$SKILLC" >/dev/null
 
 case "$KIND" in
   milestone)
