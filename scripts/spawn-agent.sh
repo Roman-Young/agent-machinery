@@ -101,10 +101,15 @@ RULES:
 - Do the NEXT SINGLE MILESTONE — one coherent, reviewable chunk of progress — then STOP. Do not try to finish the whole job in one run.
 - You may Read/Edit/Write files. You may NOT push, commit, or send anything, and you have no shell. Leave irreversible/outward actions to Roman.
 - If you need a decision from Roman, or you are blocked or unsure, STOP and ask instead of guessing.
+- SKILL CANDIDATE (optional): if in doing this work you worked out a REPEATABLE procedure worth reusing (a workflow, a setup, a protocol), note it on its own line as 'skill-candidate: <kebab-name> — <=60-char description'. It rides your report to the bus and gets proposed to Roman later; do NOT write any skill file yourself.
+- APPROVAL PROTOCOL: if you have PREPARED anything irreversible or outward-facing (an email/message draft, a commit-ready diff, a form submission, a file-write that needs sign-off), do NOT apply it — surface it for approval. Put the EXACT artifact VERBATIM (not a summary) between the two markers below, then use the needs_input line to ask. Roman approves/edits/rejects it via an override; you are approving a concrete thing, not an intention.
+      -----BEGIN ARTIFACT-----
+      <the exact draft / diff / action, verbatim>
+      -----END ARTIFACT-----
 
 END your final message with EXACTLY ONE status line, on its own line, one of:
   <<BUS milestone>> one-sentence summary of what you did this run
-  <<BUS needs_input>> the specific question or decision you need from Roman
+  <<BUS needs_input>> the specific question or decision you need from Roman (or, per the approval protocol, APPROVE: <one-line label> with the artifact surfaced in the markers just above this line)
   <<BUS blocked>> what is blocking you
   <<BUS done>> one-sentence summary (ONLY if the entire job is now complete)"
 
@@ -119,6 +124,11 @@ LINE="$(printf '%s\n' "$OUT" | grep -oE '<<BUS (milestone|needs_input|blocked|do
 KIND="$(printf '%s' "$LINE" | sed -E 's/^<<BUS ([a-z_]+)>>.*/\1/')"
 BODY="$(printf '%s' "$LINE" | sed -E 's/^<<BUS [a-z_]+>> ?//')"
 
+# P2 approval protocol: if the worker surfaced an irreversible artifact for approval, capture it
+# VERBATIM (the single-line status parser above would otherwise truncate a multi-line draft/diff).
+# The markers themselves are stripped; only the content between them is carried onto the bus.
+ARTIFACT="$(printf '%s\n' "$OUT" | sed -n '/-----BEGIN ARTIFACT-----/,/-----END ARTIFACT-----/{/-----\(BEGIN\|END\) ARTIFACT-----/d;p;}')"
+
 case "$KIND" in
   milestone)
     "${BUS[@]}" write "$THREAD" --kind milestone --by "$LABEL" "${BODY:-(no summary)}" >/dev/null
@@ -127,8 +137,11 @@ case "$KIND" in
     echo "✅ milestone written; thread PAUSED awaiting your approval."
     ;;
   needs_input)
-    "${BUS[@]}" write "$THREAD" --kind question --by "$LABEL" --needs-input "${BODY:-needs a decision}" >/dev/null
-    echo "🔔 needs_input written (phone alerted); thread paused."
+    MSG="${BODY:-needs a decision}"
+    # Carry the full artifact (if any) onto the bus so Roman approves the concrete thing, not a label.
+    [[ -n "$ARTIFACT" ]] && MSG="$MSG"$'\n\n-----ARTIFACT (for approval)-----\n'"$ARTIFACT"
+    "${BUS[@]}" write "$THREAD" --kind question --by "$LABEL" --needs-input "$MSG" >/dev/null
+    echo "🔔 needs_input written (phone alerted); thread paused.$([[ -n "$ARTIFACT" ]] && echo ' Artifact attached for approval.')"
     ;;
   blocked)
     "${BUS[@]}" write "$THREAD" --kind uncertainty --by "$LABEL" --needs-input "BLOCKED: ${BODY:-unspecified}" >/dev/null

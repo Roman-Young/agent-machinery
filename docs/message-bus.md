@@ -148,6 +148,44 @@ python3 scripts/bus.py write <id> --kind override --by roman "continue" && scrip
 **Still deliberately NOT built** (each its own approval): auto-continuation (a cron sweep),
 workers spawning sub-agents (the 4th level), and a `trust` tag on messages.
 
+## Approval protocol (fleet-wide) — added 2026-07-28 (P2)
+
+Every irreversible or outward-facing action goes through ONE gate: it PAUSES and surfaces the
+**exact prepared artifact** for Roman to approve, edit, or reject — never a summary of an
+intention. This unifies what were separate rules (email "draft, never send"; the bus
+`needs_input` pause) into one recognizable protocol, and hardens the approval side of the trust
+boundary *before* workers start producing real artifacts (skill writes, browser submits).
+
+- **Headless workers:** a worker that has prepared something irreversible (an email/message
+  draft, a commit-ready diff, a form submission, a file-write needing sign-off) does NOT apply
+  it. It surfaces the artifact verbatim between `-----BEGIN ARTIFACT-----` / `-----END
+  ARTIFACT-----` markers and ends with `<<BUS needs_input>> APPROVE: <label>`. `spawn-agent.sh`
+  (the trusted wrapper) strips the markers and carries the full artifact onto the bus in the
+  `needs_input` message — so what pauses on the thread is the concrete thing, not a one-liner
+  (the single-line status parser would otherwise truncate it). Roman approves via an `override`;
+  the re-staffed worker reads it and applies / edits / abandons accordingly.
+- **Interactive orchestrator:** the same discipline, already in force — email and message drafts
+  are shown in-chat (or created as Gmail drafts) for approval; nothing sends. This section names
+  that the two paths are ONE protocol.
+- **Precedent:** LangGraph's `interrupt(value)` — pause *with the proposed action as the surfaced
+  value*, resume with an explicit approval. The bus's `needs_input`→`override` is that round-trip.
+- **Why it matters:** approving a concrete artifact (not "send an email to Dan?") is what makes
+  "draft, never send / propose and wait" real, and it is the single gate that P5 (skill writes)
+  and P7 (browser submits) hang their irreversible steps on.
+
+## Idempotency & replay — the invariant behind milestone-resume (P4, added 2026-07-28)
+
+A paused thread resumes by launching a FRESH `claude -p` worker that re-reads the thread and
+continues — the bus keeps no in-process state to restore. So **every milestone must be idempotent:
+re-running it (from a retry, a resume, or a re-staff after an `override`) must not double-do
+anything.** Today this holds *by construction* — workers have no shell and cannot push/commit/send,
+so a re-run physically cannot double-send an email or double-commit. **That safety is not
+incidental; it is the reason the trust boundary bars irreversible actions from workers.** Written
+down here so it survives the day someone widens the boundary: if a worker is ever allowed an
+irreversible action, that action must be individually idempotent (guarded / deduped) OR gated
+behind the approval protocol above — because replay WILL re-execute it. (This is LangGraph's
+hardest-won lesson — "checkpoints are not durable execution" — imported as a rule, not a framework.)
+
 ## Expansion roadmap
 
 - **Dashboard:** `bus.py render` → a deterministic `bus.md` view (like `tasks.md`), or a

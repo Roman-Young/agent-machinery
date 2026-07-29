@@ -119,6 +119,15 @@ Do these, in order:
 6. Anything else AMBIGUOUS — do NOT guess; add a short bullet to logs/daily/$TODAY.md under
    '## Needs Roman (reconciliation)' and move on.
 
+7. SKILL CANDIDATE — did today's log show a REPEATABLE PROCEDURE worth capturing as a skill (a
+   multi-step 'how I do X for Roman' that will recur — a workflow, a lab protocol, a setup), that
+   is NOT already in skills/skills-index.md? If so, PROPOSE it — never write it, Roman is the
+   curator: add a bullet to '## Needs Roman (reconciliation)' as
+   'Skill candidate: <suggested-kebab-name> — <=60-char description — why it will recur'.
+   Apply the anti-capture rule: propose the PROCEDURE/FIX, never a one-off task, a failure, or a
+   'tool X doesn't work' claim; prefer suggesting a PATCH to an existing skill over a near-duplicate.
+   At most 1-2 candidates a night — a quiet day yields none. Do NOT write skills/ yourself.
+
 If tasks.yaml changed at all, re-render: python3 \"$SCRIPT_DIR/render-tasks.py\" \"\$CONTEXT_DIR/tasks.yaml\"
 
 RULES:

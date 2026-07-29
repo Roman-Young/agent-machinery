@@ -286,6 +286,115 @@ def cmd_snapshot(args) -> None:
     print(f"bus: snapshot -> {dest}")
 
 
+# Waiting-on-a-human first, then in-progress, then idle, then closed. Mirrors the
+# render-tasks.py idea: a deterministic view is a pure function of the source of truth,
+# so the model never hand-sorts the board (the exact job a script should do exactly).
+RENDER_STATUS_RANK = {"needs_input": 0, "blocked": 1, "working": 2, "open": 3,
+                      "done": 4, "killed": 5}
+
+
+def _oneline(s: str, n: int = 140) -> str:
+    """Collapse a message body into one table-safe cell: newlines gone, pipes escaped,
+    truncated. Bodies are free text (and may be untrusted-origin) — never let one break
+    the markdown table or leak a newline into a row."""
+    s = " ".join((s or "").split())
+    if len(s) > n:
+        s = s[: n - 1].rstrip() + "…"
+    return s.replace("|", "\\|")
+
+
+def cmd_render(args) -> None:
+    """Regenerate bus.md — a deterministic, glanceable board of the whole fleet, the bus
+    analogue of render-tasks.py -> tasks.md. Pure function of the DB: same state, same file.
+    Writes into local-only/ next to the DB by default, because the board contains message
+    CONTENT (personal, possibly untrusted-origin data) — so it is gitignored exactly like the
+    DB and never leaves the server, yet is still visible to Roman in his local file panel.
+    Threads waiting on a human sort to the top."""
+    conn = connect()
+    rows = conn.execute(
+        "SELECT t.*, "
+        "  (SELECT COUNT(*) FROM messages m WHERE m.thread_id=t.id AND m.needs_input=1) AS waiting, "
+        "  (SELECT COUNT(*) FROM messages m WHERE m.thread_id=t.id) AS msgs, "
+        "  (SELECT kind   FROM messages m WHERE m.thread_id=t.id ORDER BY seq DESC LIMIT 1) AS last_kind, "
+        "  (SELECT sender FROM messages m WHERE m.thread_id=t.id ORDER BY seq DESC LIMIT 1) AS last_sender, "
+        "  (SELECT body   FROM messages m WHERE m.thread_id=t.id ORDER BY seq DESC LIMIT 1) AS last_body "
+        "FROM threads t"
+    ).fetchall()
+    conn.close()
+
+    active = [r for r in rows if r["status"] not in ("done", "killed")]
+    closed = [r for r in rows if r["status"] in ("done", "killed")]
+    waiting = [r for r in active if r["waiting"]]
+    # Stable double-sort: newest-first, then bucket by status rank (Python sort is stable,
+    # so within a rank band the newest-updated thread stays first).
+    active.sort(key=lambda r: r["updated_at"], reverse=True)
+    active.sort(key=lambda r: RENDER_STATUS_RANK.get(r["status"], 9))
+
+    ts = now_iso()
+    n_wait = len(waiting)
+    lines = []
+    lines.append("# Fleet — the agent bus board")
+    lines.append("")
+    lines.append(
+        "<!-- GENERATED FILE — DO NOT HAND-EDIT. Regenerate with:\n"
+        "     python3 agent-machinery/scripts/bus.py render\n"
+        "Source of truth is the bus DB. This file lives in local-only/ because it holds\n"
+        "message content (personal, possibly untrusted-origin data) — it is gitignored like\n"
+        "the DB and never leaves the server. Any hand-edit here is overwritten on next render.\n\n"
+        f"Rendered: {ts}\n"
+        f"Active: {len(active)}  ·  Waiting on you: {n_wait}  ·  Closed: {len(closed)}\n"
+        "-->"
+    )
+    lines.append("")
+    lines.append("## How this works")
+    lines.append("")
+    lines.append("Just talk to me — *\"what's running\"*, *\"spin up a worker on X\"*, "
+                 "*\"steer thread Y\"*, *\"kill Z\"*. Full design + raw CLI: `docs/message-bus.md`.")
+    lines.append("")
+
+    if waiting:
+        lines.append(f"## 🔔 Waiting on you ({n_wait})")
+        lines.append("")
+        lines.append("| Thread | Project / Title | Asked |")
+        lines.append("|---|---|---|")
+        for r in waiting:
+            asked = f"*{r['last_sender']}*: {_oneline(r['last_body'])}"
+            lines.append(f"| `{r['id']}` | {(r['project'] or '—')} / {r['title']} | {asked} |")
+        lines.append("")
+
+    lines.append("## Active threads")
+    lines.append("")
+    if not active:
+        lines.append("*Nothing running. Spin one up: \"start a worker on …\".*")
+    else:
+        lines.append("| Thread | Status | Msgs | 🔔 | Project / Title | Last |")
+        lines.append("|---|---|---|---|---|---|")
+        for r in active:
+            flag = "🔔" if r["waiting"] else ""
+            last = f"{r['last_kind']}: {_oneline(r['last_body'], 80)}" if r["last_kind"] else "—"
+            lines.append(f"| `{r['id']}` | {r['status']} | {r['msgs']} | {flag} | "
+                         f"{(r['project'] or '—')} / {r['title']} | {last} |")
+    lines.append("")
+
+    if closed:
+        lines.append("---")
+        lines.append("")
+        lines.append(f"## ✅ Closed ({len(closed)})")
+        lines.append("")
+        lines.append("*Newest first. Full history stays in the bus: `bus.py read <id>`.*")
+        lines.append("")
+        for r in sorted(closed, key=lambda r: r["updated_at"], reverse=True):
+            mark = "🏁" if r["status"] == "done" else "🛑"
+            lines.append(f"- {mark} `{r['id']}` **{r['title']}** ({r['project'] or '—'}) "
+                         f"— {_oneline(r['last_body'], 100)}")
+        lines.append("")
+
+    out = Path(args.path) if args.path else (db_path().parent / "bus.md")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n".join(lines))
+    print(f"bus: rendered {len(active)} active ({n_wait} waiting), {len(closed)} closed -> {out}")
+
+
 # ── argparse ──────────────────────────────────────────────────────────────────
 
 def build_parser() -> argparse.ArgumentParser:
@@ -334,6 +443,11 @@ def build_parser() -> argparse.ArgumentParser:
     sn = sub.add_parser("snapshot", help="VACUUM INTO a consistent copy (for backup)")
     sn.add_argument("path")
     sn.set_defaults(fn=cmd_snapshot)
+
+    rn = sub.add_parser("render", help="regenerate bus.md (glanceable board; like tasks.md)")
+    rn.add_argument("--path", default=None,
+                    help="output path (default: local-only/bus.md, next to the DB)")
+    rn.set_defaults(fn=cmd_render)
     return p
 
 

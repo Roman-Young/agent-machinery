@@ -112,6 +112,10 @@ every session start, so every line has a permanent cost. Sections:
 
 RULES:
 - Only record what is EVIDENCED by the daily logs. Never invent, never pad a thin week.
+- ANTI-CAPTURE — what a candidate must NOT be: a one-off failure, a transient error, an
+  environment-dependent glitch, or a negative tool claim (\"tool X doesn't work\" — these harden
+  into refusals the system later cites against itself). Capture the FIX or the durable pattern,
+  not the failure. Prefer REFINING an existing insight over proposing a new near-duplicate.
 - Do NOT edit insights.md. Candidates are proposals; an interactive session raises them
   with Roman (propose-and-wait).
 - Never write secrets. Never copy anything out of local-only/.
