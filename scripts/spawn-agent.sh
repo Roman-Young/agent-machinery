@@ -13,6 +13,8 @@
 #     script. There is no timer, no self-continuation. "Propose and wait", enforced by
 #     the process model, not by a prompt we hope the model obeys.
 #   * ORCHESTRATOR-ONLY. Only Kairo runs this. A worker cannot spawn its own workers.
+#     (If that 4th level is EVER opened, it opens bounded: spawn-depth <= 2, children <= 3 per
+#      parent, within AGENT_MAX_CONCURRENT. Pre-decided — see docs/message-bus.md "gated 4th level".)
 #
 # It is bounded by construction, three ways:
 #   1. Every milestone is a fresh run through run-agent.sh — so it inherits ALL of that
@@ -46,18 +48,32 @@ notify_fyi() { "$SCRIPT_DIR/notify.sh" fyi "🤖 bus: $1" "$2" >/dev/null 2>&1 |
 notify_alert() { "$SCRIPT_DIR/notify.sh" alert "🤖 bus: $1" "$2" >/dev/null 2>&1 || true; }
 
 # ── args ──────────────────────────────────────────────────────────────────────
-THREAD="${1:?usage: spawn-agent.sh <thread-id> [--tools ...] [--label ...] [--dir ...]}"; shift
+THREAD="${1:?usage: spawn-agent.sh <thread-id> [--tools ...] [--label ...] [--dir ...] [--tier cheap|deep]}"; shift
 TOOLS="Read,Glob,Grep"          # safe default; NO Bash, NO Edit/Write, NO send
 LABEL="worker"
 WORKDIR=""
+TIER="cheap"                    # P6: default cheap; orchestrator sets 'deep' for hard milestones
+MODEL=""                        # an explicit --model wins over --tier
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --tools) TOOLS="$2"; shift 2;;
     --label) LABEL="$2"; shift 2;;
     --dir)   WORKDIR="$2"; shift 2;;
+    --tier)  TIER="$2"; shift 2;;
+    --model) MODEL="$2"; shift 2;;
     *) echo "spawn-agent: unknown arg '$1'"; exit 2;;
   esac
 done
+# P6 — model tiering: resolve the tier to a model (explicit --model overrides). Cheap by default;
+# escalate to deep only for hard milestones per the rubric in docs/message-bus.md. Models are
+# env-overridable so the mapping isn't hardcoded to today's model names.
+if [[ -z "$MODEL" ]]; then
+  case "$TIER" in
+    cheap) MODEL="${AGENT_MODEL_CHEAP:-sonnet}";;
+    deep)  MODEL="${AGENT_MODEL_DEEP:-opus}";;
+    *) echo "🔴 spawn-agent: --tier must be 'cheap' or 'deep' (got '$TIER')"; exit 2;;
+  esac
+fi
 # Refuse Bash/push/send in a spawned worker — the trust boundary is not optional.
 if echo "$TOOLS" | grep -qiE 'bash|create_draft|send'; then
   echo "🔴 spawn-agent: refusing — a worker must not have Bash or a send/draft tool."; exit 2
@@ -87,15 +103,11 @@ fi
 # ── build the milestone prompt from the thread's history on the bus ───────────
 HISTORY="$("${BUS[@]}" read "$THREAD")"
 DIRLINE=""; [[ -n "$WORKDIR" ]] && DIRLINE="The project lives at: $WORKDIR  (use ABSOLUTE paths for all file work — your working directory is elsewhere)."
-PROMPT="You are a focused deep-work agent in Roman's system, assigned to ONE thread: \"$TITLE\".
-Do NOT run any session-start routine and do NOT read the personal context files — you are a worker, not the orchestrator. Just do the work below.
-
-$DIRLINE
-
-Here is the thread so far (your brief, prior milestones, and any steering from Roman) — read it, then continue from where it left off:
--------------------- THREAD $THREAD --------------------
-$HISTORY
--------------------------------------------------------
+# P6 cache-stable prefix: the invariant instruction block is IDENTICAL for every worker and comes
+# FIRST, so re-spawns of a thread (and different threads) hit the provider prompt cache. The only
+# variable content — the thread's title, workdir, and growing history — trails at the very end.
+PROMPT="You are a focused deep-work agent in Roman's system, assigned to ONE bus thread.
+Do NOT run any session-start routine and do NOT read the personal context files — you are a worker, not the orchestrator. Do only the work described under YOUR ASSIGNMENT below.
 
 RULES:
 - Do the NEXT SINGLE MILESTONE — one coherent, reviewable chunk of progress — then STOP. Do not try to finish the whole job in one run.
@@ -111,13 +123,23 @@ END your final message with EXACTLY ONE status line, on its own line, one of:
   <<BUS milestone>> one-sentence summary of what you did this run
   <<BUS needs_input>> the specific question or decision you need from Roman (or, per the approval protocol, APPROVE: <one-line label> with the artifact surfaced in the markers just above this line)
   <<BUS blocked>> what is blocking you
-  <<BUS done>> one-sentence summary (ONLY if the entire job is now complete)"
+  <<BUS done>> one-sentence summary (ONLY if the entire job is now complete)
+
+--- YOUR ASSIGNMENT ---
+Thread: \"$TITLE\"  (id $THREAD).
+$DIRLINE
+Here is the thread so far (your brief, prior milestones, and any steering from Roman) — read it, then continue from where it left off:
+-------------------- THREAD $THREAD --------------------
+$HISTORY
+-------------------------------------------------------
+
+Now do the next single milestone as described above, and end with EXACTLY ONE <<BUS ...>> status line."
 
 # ── run ONE milestone through the choke point (inherits all guards) ───────────
-echo "▶ spawning worker '$LABEL' on $THREAD (slot held; tools: $TOOLS)"
+echo "▶ spawning worker '$LABEL' on $THREAD (slot held; tools: $TOOLS; tier: $TIER → model: $MODEL)"
 export AGENT_ALLOWED_TOOLS="$TOOLS"
 export AGENT_MAX_TURNS="${AGENT_MAX_TURNS_DW:-40}"
-OUT="$("$SCRIPT_DIR/run-agent.sh" "$THREAD" "$PROMPT" 2>>"${AGENT_LOG_DIR:-$HOME/.agent-logs}/spawn-agent.log")"
+OUT="$("$SCRIPT_DIR/run-agent.sh" "$THREAD" "$PROMPT" --model "$MODEL" 2>>"${AGENT_LOG_DIR:-$HOME/.agent-logs}/spawn-agent.log")"
 
 # ── relay the result to the bus (assert the status line; never infer) ─────────
 LINE="$(printf '%s\n' "$OUT" | grep -oE '<<BUS (milestone|needs_input|blocked|done)>>.*' | tail -1)"

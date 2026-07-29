@@ -150,9 +150,15 @@ phone ping (`needs_input`) pulls the owner in only when a decision is actually n
   A worker that ingests a web page or email must never hold a shell; the wrapper is the ONLY thing
   that writes to the bus, so untrusted text never becomes a bus write except through it. Never hand
   a worker Bash "to make it easier."
-- **Orchestrator-only:** only this seat spawns; a worker cannot spawn workers.
+- **Orchestrator-only:** only this seat spawns; a worker cannot spawn workers. If that gate is ever
+  opened, it opens **bounded** — spawn-depth ≤ 2, children ≤ 3 per parent, within the concurrency
+  cap (pre-decided; see `docs/message-bus.md`). Keep it gated until there's evidence it's needed.
 - **Concurrency:** the box is ~8GB with NO swap (an overcommit is an instant OOM kill, not a
   slowdown). Hold **3–4 workers max**; run larger sweeps in waves and watch `free -m` at peak.
+- **Model tiering:** workers default to the cheap tier (`--tier cheap`, Sonnet). Pass `--tier deep`
+  (Opus) only for hard milestones — synthesis/design/architecture, adversarial review, hard
+  debugging — or to retry a `blocked`/low-quality cheap result. Default cheap; escalate on the
+  rubric. See `docs/message-bus.md`.
 - **Guards are inherited:** every milestone is a fresh `run-agent.sh` run (flock, timeout, circuit
   breaker, max-turns, fail-loud) — nothing can bypass them.
 - The bus DB and `bus.md` live in `$CONTEXT_DIR/local-only/` (gitignored): message content is

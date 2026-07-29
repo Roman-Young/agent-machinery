@@ -14,7 +14,8 @@ Map what I said ($ARGUMENTS) to the bus:
 - **"spin up a worker on X" / "research X" / "start …"** → `bus.py spawn` a thread (short title +
   project), then `scripts/spawn-agent.sh <id> --tools "Read,Glob,Grep,WebSearch,WebFetch" --label …`
   (add `--dir /abs/repo` for a local codebase). Workers are **read-only** — never add Bash/send/draft.
-  Respect the **3–4 concurrent cap**; if at capacity, say so rather than forcing it.
+  Default to the cheap tier; add `--tier deep` only for hard milestones (synthesis/design/adversarial
+  review/hard debug). Respect the **3–4 concurrent cap**; if at capacity, say so rather than forcing it.
 - **"steer thread Y: …" / "approve Y" / "continue Y"** → `bus.py write <id> --kind override
   --by roman "…"`, then re-run `spawn-agent.sh <id> …` to staff the next milestone.
 - **"what did Y find" / "read Y"** → `bus.py read <id>` and summarize what the worker reported.

@@ -186,6 +186,51 @@ irreversible action, that action must be individually idempotent (guarded / dedu
 behind the approval protocol above — because replay WILL re-execute it. (This is LangGraph's
 hardest-won lesson — "checkpoints are not durable execution" — imported as a rule, not a framework.)
 
+## The gated 4th level (workers spawning workers) — pre-decided bounds (P8, added 2026-07-28)
+
+The bus is deliberately **supervisor-only**: only the orchestrator spawns; a worker cannot spawn
+its own workers (`spawn-agent.sh` is orchestrator-run, and workers have no shell to call it). The
+4th hierarchy level (`threads.parent_id` supports it in the schema) stays **GATED** — it is the
+exact "an agent that can call itself, on a timer, with a credit card" runaway class the boundedness
+discipline exists to prevent, and on a no-swap box uncontrolled spawning is an instant OOM.
+
+This section does NOT open the gate. It records the bounds the gate must open WITH, so that
+enabling it later is "flip it on with these caps," never "invent safe limits under pressure":
+
+- **max spawn depth ≤ 2** — a worker may spawn a sub-worker, but that sub-worker may NOT spawn
+  further. Two levels below the orchestrator, hard stop.
+- **max concurrent children ≤ 3** per parent — AND the global `AGENT_MAX_CONCURRENT` semaphore
+  still caps the total across the whole tree (children get no separate budget).
+- Every spawned level still passes through `run-agent.sh` (flock, timeout, circuit breaker,
+  max-turns, fail-loud) and the no-Bash / no-send trust boundary.
+
+Why these numbers: three independently-built systems converged on supervisor-first with exactly
+this shape — Hermes's `delegate_tool` (`max_spawn_depth: 2`, `max_concurrent_children: 3`),
+LangGraph's "start supervisor, graduate to swarm only on measured latency evidence," and the
+managed-agents guide's hosted model. **Keep the level gated** until there is measured evidence the
+single supervisor hop is a real bottleneck; then open it bounded by the above.
+
+## Model tiering (P6, added 2026-07-28)
+
+Workers are staffed at a MODEL TIER, chosen per milestone by the orchestrator, defaulting cheap.
+Statelessness makes this free to control — each milestone is a fresh spawn, so there is nothing to
+up/downgrade mid-run; you just pick the tier for the next spawn.
+
+- `spawn-agent.sh --tier cheap|deep` (default `cheap`). `cheap` → `$AGENT_MODEL_CHEAP` (default
+  `sonnet`); `deep` → `$AGENT_MODEL_DEEP` (default `opus`); an explicit `--model <id>` overrides.
+- **Default cheap.** The bulk of bus work — research reads, scraping, mechanical edits, triage,
+  first-pass drafting — runs on the cheap tier.
+- **Move UP to `deep` when the milestone is genuinely hard:** multi-step synthesis / design /
+  architecture, adversarial review / verification where being wrong is expensive, or hard
+  debugging. Heuristic: escalate when a wrong answer is costly AND hard to catch.
+- **Evidence-based escalation:** if a cheap worker returns `<<BUS blocked>>` or a milestone the
+  orchestrator judges wrong / low-quality, re-staff the SAME milestone at `--tier deep`
+  (retry-at-higher-tier). There is no mid-task downgrade — the next milestone simply spawns cheap.
+- **Cache-stable prefix.** The worker prompt keeps its invariant instruction block FIRST and the
+  variable thread history LAST, so re-spawns of a thread hit the provider prompt cache (a measured
+  ~26% saving in the systems this pattern came from). Never interleave thread-specific text into
+  the instruction block.
+
 ## Expansion roadmap
 
 - **Dashboard:** `bus.py render` → a deterministic `bus.md` view (like `tasks.md`), or a
