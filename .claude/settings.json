@@ -37,10 +37,18 @@
     "",
     "4. Credentials are denied at the Read layer and are read-only by construction",
     "   (GitHub PAT, Hetzner token). Worst case is disclosure, not destruction.",
+    "",
+    "5. defaultMode: acceptEdits (Roman, 2026-07-29) — file edits (Edit/Write/",
+    "   NotebookEdit) auto-accept without a prompt; too many were trivial to approve.",
+    "   Bash, git push, sudo, and the deny list (incl. **/.env, secrets) are",
+    "   UNAFFECTED and still gate as above. Edit-only convenience, not a loosening",
+    "   of the real boundary. Toggle live with Shift+Tab; this makes it the default.",
     "════════════════════════════════════════════════════════════════════════════"
   ],
 
   "permissions": {
+    "defaultMode": "acceptEdits",
+
     "allow": [
       "Bash",
 
