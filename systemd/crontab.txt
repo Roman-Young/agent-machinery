@@ -93,4 +93,14 @@ S=/home/roman/agent/agent-machinery/scripts
 # live in the installed crontab but had drifted OUT of this source file; restored here so an
 # install from this file no longer silently drops it. The source file is the source of truth.
 25 7-23 * * *   /home/roman/agent/agent-machinery/scripts/email-triage.sh >> /home/roman/.agent-logs/triage.log 2>&1
+
+# ── CANVAS DEADLINE SYNC (timezone-independent) ──────────────────────────────
+# A persistent headless Chrome holds the logged-in Canvas session (one-time SSO+Duo login via
+# canvas-login.sh; ~weekly re-auth when Duo's 7-day device trust lapses). canvas-chrome.sh is the
+# idempotent keep-alive: at boot + every 10 min it launches Chrome if the debug port isn't
+# answering, else exits instantly. canvas-sync pulls deadlines into tasks.yaml 3x/day — plain UTC
+# hours (no run-local twin), deterministic Python (NOT a claude -p job), fail-loud on logged_out.
+@reboot          /home/roman/agent/agent-machinery/scripts/canvas-chrome.sh >> /home/roman/.agent-logs/canvas-chrome.log 2>&1
+*/10 * * * *     /home/roman/agent/agent-machinery/scripts/canvas-chrome.sh >> /home/roman/.agent-logs/canvas-chrome.log 2>&1
+15 8,14,20 * * * /home/roman/agent/agent-machinery/scripts/canvas-sync.sh >> /home/roman/.agent-logs/canvas-sync.log 2>&1
 # ─────────────────────────────────────────────────────────────────────────────
