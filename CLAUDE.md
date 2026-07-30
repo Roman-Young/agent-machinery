@@ -189,6 +189,31 @@ task matches — the same progressive-disclosure pattern as the `reference/` bri
   approval → skill — the procedural-memory mirror of the log → insight promotion ladder.
 - **Nothing is deleted** — an obsolete skill is archived, same rule as everywhere else.
 
+## The browser agent
+
+Kairo can drive a **persistent, logged-in headless Chrome on the server** to act on login-walled
+sites that have no API — read *or* (gated) act. Canvas deadline sync is the first, read-only use
+(`docs/canvas-access.md`); it is a **general capability**, not a Canvas tool. Built 2026-07-30.
+
+**How it works.** A headless Chrome holds a real SSO session (one-time human login via an SSH-tunnel
++ `chrome://inspect`; ~weekly re-auth). Scripts talk to it over CDP on a **loopback-only** debug
+port. Data comes from the site's own JSON API called *in-session* (session cookie) where possible —
+not HTML scraping. `canvas-*` scripts are the worked example; per-site playbooks live as
+`skills/browser/<host>/` (minted propose-and-wait, so the capability compounds).
+
+**Hard rules — never bypass:**
+- **Irreversible/outward/spending actions are NEVER autonomous.** Read / navigate / prepare freely;
+  but any purchase, booking, submit, or send **pauses and surfaces the EXACT action** (cart + total,
+  reservation, the message) for Roman's approval via the **approval protocol** (needs_input→override,
+  or shown in-chat) before the final click. This is the load-bearing pillar — real money is at stake.
+- **Security:** the CDP debug port binds **127.0.0.1 only**, reached solely over the SSH tunnel —
+  an open CDP port is unauthenticated RCE. **Never** `--remote-debugging-address=0.0.0.0`.
+- **Trust boundary:** the browser ingests untrusted web content, so it never shares a privilege
+  context with a shell or an edit-capable LLM (the Canvas reader only reads; the writer is
+  deterministic Python that never touches the network).
+- **Gotcha:** a `--headless` Chrome's UA (`HeadlessChrome`) is blocked by UCSD Duo — the launcher
+  spoofs a normal `Chrome/…` UA. Don't remove it.
+
 ## Memory maintenance
 
 - You are responsible for keeping memory current. When a session
