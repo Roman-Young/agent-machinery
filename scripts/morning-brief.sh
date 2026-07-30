@@ -73,6 +73,10 @@ Then, after the coverage line, SHORT plain-text lines, no markdown:
 - Today's calendar, if anything
 - The single most important thing to do today
 - One open loop going stale, if any
+- Any PENDING skill candidate proposed in a recent day's '## Needs Roman' section (a
+  'Skill candidate:' line not yet written to skills/). Name it and note Roman can just
+  reply 'add it' — so a good repeatable procedure gets captured instead of sitting unapproved.
+  Omit this line if there are none.
 
 Under 900 characters total — it goes to a phone notification.
 Be specific and blunt. No pleasantries. Do not modify any files.")
