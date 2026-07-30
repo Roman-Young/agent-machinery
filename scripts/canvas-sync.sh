@@ -30,11 +30,13 @@ echo "[$(date -Is)] canvas-sync starting" >> "$LOG"
 "$SCRIPT_DIR/canvas-chrome.sh" >> "$LOG" 2>&1 || true
 
 # GUARD 2: timeouts around each stage. canvas-fetch reads the web via CDP; canvas-sync writes YAML.
-if ! timeout 150 "$UV" run --with websockets python3 "$SCRIPT_DIR/canvas-fetch.py" > "$FETCH_OUT" 2>> "$LOG"; then
+# fetch to a temp file, promote on success — so a fetch failure never clobbers the last-good cache
+if ! timeout 150 "$UV" run --with websockets python3 "$SCRIPT_DIR/canvas-fetch.py" > "$FETCH_OUT.tmp" 2>> "$LOG"; then
   echo "SOURCES: canvas=FAIL (fetch_timeout_or_error)"
   notify "⚠️ Canvas sync failed" "canvas-fetch timed out or errored. Check $LOG"
   exit 1
 fi
+mv -f "$FETCH_OUT.tmp" "$FETCH_OUT"
 
 OUT="$(timeout 90 "$UV" run --with 'ruamel.yaml' python3 "$SCRIPT_DIR/canvas-sync.py" "$FETCH_OUT" 2>> "$LOG")"
 echo "$OUT" | tee -a "$LOG"

@@ -89,7 +89,16 @@ def _next_link(link_header):
 def _looks_logged_out(status, body):
     if status in (401, 403):
         return True
-    head = (body or "").lstrip()[:300].lower()
+    stripped = (body or "").lstrip()
+    # A valid JSON body is NEVER a login page — parse first. Only sniff for SSO/HTML markers when the
+    # body is not JSON, else a course/assignment named "Triton…"/"…SAML…" would false-trigger re-auth.
+    if stripped[:1] in ("{", "["):
+        try:
+            json.loads(stripped)
+            return False
+        except ValueError:
+            pass
+    head = stripped[:300].lower()
     return head.startswith("<") or "saml" in head or "single sign" in head or "triton" in head
 
 
@@ -113,11 +122,13 @@ async def _paged(ws, path, base_mid):
 
 
 async def main():
-    ws_url = canvas_page_ws()
-    if not ws_url:
-        print(json.dumps({"status": "error", "reason": "no_canvas_tab_or_browser_down"}))
-        return
     try:
+        # Inside the try: if Chrome/the CDP port is down, canvas_page_ws() raises URLError, and the
+        # generic except below turns it into clean error JSON (not a traceback + exit 1).
+        ws_url = canvas_page_ws()
+        if not ws_url:
+            print(json.dumps({"status": "error", "reason": "no_canvas_tab_or_browser_down"}))
+            return
         async with websockets.connect(ws_url, max_size=None) as ws:
             await ws.send(json.dumps({"id": 1, "method": "Runtime.enable"}))
             s, _, body = await api_get(ws, "/api/v1/users/self", 5)
