@@ -27,10 +27,11 @@ ENV_FILE="$HOME/agent/agent-machinery/.env"
 
 die() { echo "site-deploy: $*" >&2; exit 1; }
 
-# gh authenticates off the same write-scoped token (repo-scoped, so blast radius = this repo).
-gh_token() { grep '^GITHUB_WRITE_TOKEN=' "$ENV_FILE" 2>/dev/null | cut -d= -f2-; }
-export GH_TOKEN; GH_TOKEN="$(gh_token)"
-[ -n "$GH_TOKEN" ] || die "GITHUB_WRITE_TOKEN not set in $ENV_FILE — create the PAT first (see docs/site-deploy.md)."
+# Auth (2026-08-06): ships on EXISTING creds — gh CLI is already logged in (hosts.yml) and
+# `git push` uses the working credential helper. If the optional scoped write token is wired in
+# later (docs/site-deploy.md), push transparently uses the repo-local helper and gh uses hosts.yml
+# — nothing here changes. So no token-from-.env plumbing is needed.
+gh auth status >/dev/null 2>&1 || die "gh CLI is not authenticated — run 'gh auth login' (see docs/site-deploy.md)."
 
 cd "$REPO" || die "repo not found at $REPO"
 

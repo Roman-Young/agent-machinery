@@ -21,11 +21,26 @@ Roman reviews the preview URL → approves
 
 `site-deploy.sh status` lists open Kairo PRs awaiting review.
 
-## One-time setup (Roman does these — Kairo cannot)
+## ⚠️ Correction (2026-08-06): the existing credentials already have write
 
-Kairo's existing `GITHUB_TOKEN` is **read-only by design** (it holds a shell while reading
-untrusted email/web, so every token it carries is a prompt-injection blast radius). Pushing
-needs a **separate, tightly-scoped write token** — that separation is the whole point.
+An earlier version of this doc said `GITHUB_TOKEN` was read-only and a write token had to be
+created before this could work. **That was wrong** — verified 2026-08-06, Kairo has TWO
+write-capable GitHub credentials:
+
+- `.env` **`GITHUB_TOKEN`** (used by `git push` via `git-credential-cairo.sh`): `push:true,
+  admin:true` on personal-website.
+- The **`gh` CLI token** (`~/.config/gh/hosts.yml`, separate from `.env`): scopes `gist,
+  read:org, repo, workflow` — `repo` is full write to every repo.
+
+So **the pipeline works today with existing creds** — the setup below is OPTIONAL and its purpose
+is *narrowing* over-broad access, not enabling pushes. The gate that matters is behavioral (never
+auto-merge to production), not the credential.
+
+## Optional hardening — narrow the write credential (Roman does these)
+
+The tokens above are broad (all repos; `workflow`; admin) and live in a shell that reads
+untrusted email/web — a prompt-injection blast radius. A fine-grained PAT scoped to this one repo
+shrinks that. To use the scoped path instead of the existing broad creds:
 
 ### 1. Create a fine-grained PAT (least privilege)
 
