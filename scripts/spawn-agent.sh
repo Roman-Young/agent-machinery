@@ -80,6 +80,18 @@ if echo "$TOOLS" | grep -qiE 'bash|create_draft|send'; then
   echo "🔴 spawn-agent: refusing — a worker must not have Bash or a send/draft tool."; exit 2
 fi
 
+# P-trust (2026-08-07): classify this worker's OUTPUT provenance from the tools it was granted.
+# A worker with any content-ingesting tool (web fetch/search, a browser, or a read connector like
+# Gmail/Drive/Calendar/Notion/Granola/PubMed) can pull UNTRUSTED text off the internet or an inbox
+# and relay it onto the bus. We tag every such worker's writes 'untrusted' so a shell-capable
+# reader (the orchestrator, and spawn-agent.sh itself when it builds the NEXT worker's prompt from
+# `bus.py read`) treats that content as DATA, never instructions. Mirrors the Bash/send refusal
+# above: the wrapper knows the granted tools, so it — not the (possibly-injected) worker — sets trust.
+TRUST="trusted"
+if echo "$TOOLS" | grep -qiE 'webfetch|websearch|fetch|browser|gmail|drive|calendar|notion|granola|pubmed|zoom|mcp__'; then
+  TRUST="untrusted"
+fi
+
 # ── thread must exist and be continuable ──────────────────────────────────────
 STATUS="$("${BUS[@]}" get "$THREAD" status 2>/dev/null)" || { echo "🔴 no such thread: $THREAD"; exit 2; }
 case "$STATUS" in
@@ -161,11 +173,11 @@ fi
 # worker prompt promises it "rides your report to the bus". The orchestrator surfaces it to Roman
 # (propose-and-wait; workers never write skills). Independent of the status line's kind.
 SKILLC="$(printf '%s\n' "$OUT" | grep -iE '^[[:space:]]*skill-candidate:' || true)"
-[[ -n "$SKILLC" ]] && "${BUS[@]}" write "$THREAD" --kind note --by "$LABEL" "$SKILLC" >/dev/null
+[[ -n "$SKILLC" ]] && "${BUS[@]}" write "$THREAD" --kind note --by "$LABEL" --trust "$TRUST" "$SKILLC" >/dev/null
 
 case "$KIND" in
   milestone)
-    "${BUS[@]}" write "$THREAD" --kind milestone --by "$LABEL" "${BODY:-(no summary)}" >/dev/null
+    "${BUS[@]}" write "$THREAD" --kind milestone --by "$LABEL" --trust "$TRUST" "${BODY:-(no summary)}" >/dev/null
     "${BUS[@]}" status "$THREAD" --set needs_input >/dev/null
     notify_fyi "$THREAD" "Milestone ready — approve to continue: ${BODY:-$TITLE}"
     echo "✅ milestone written; thread PAUSED awaiting your approval."
@@ -174,24 +186,24 @@ case "$KIND" in
     MSG="${BODY:-needs a decision}"
     # Carry the full artifact (if any) onto the bus so Roman approves the concrete thing, not a label.
     [[ -n "$ARTIFACT" ]] && MSG="$MSG"$'\n\n-----ARTIFACT (for approval)-----\n'"$ARTIFACT"
-    "${BUS[@]}" write "$THREAD" --kind question --by "$LABEL" --needs-input "$MSG" >/dev/null
+    "${BUS[@]}" write "$THREAD" --kind question --by "$LABEL" --needs-input --trust "$TRUST" "$MSG" >/dev/null
     echo "🔔 needs_input written (phone alerted); thread paused.$([[ -n "$ARTIFACT" ]] && echo ' Artifact attached for approval.')"
     ;;
   blocked)
-    "${BUS[@]}" write "$THREAD" --kind uncertainty --by "$LABEL" --needs-input "BLOCKED: ${BODY:-unspecified}" >/dev/null
+    "${BUS[@]}" write "$THREAD" --kind uncertainty --by "$LABEL" --needs-input --trust "$TRUST" "BLOCKED: ${BODY:-unspecified}" >/dev/null
     "${BUS[@]}" status "$THREAD" --set blocked >/dev/null
     echo "🔔 blocked written (phone alerted)."
     ;;
   done)
-    "${BUS[@]}" write "$THREAD" --kind completion --by "$LABEL" "${BODY:-complete}" >/dev/null
+    "${BUS[@]}" write "$THREAD" --kind completion --by "$LABEL" --trust "$TRUST" "${BODY:-complete}" >/dev/null
     notify_fyi "$THREAD" "Thread complete: ${BODY:-$TITLE}"
     echo "🏁 thread marked done."
     ;;
   *)
     # No clean status line — do NOT guess what happened. Record the tail and flag for review.
     TAIL="$(printf '%s\n' "$OUT" | tail -8)"
-    "${BUS[@]}" write "$THREAD" --kind note --by "$LABEL" "raw output tail: $TAIL" >/dev/null
-    "${BUS[@]}" write "$THREAD" --kind question --by "$LABEL" --needs-input \
+    "${BUS[@]}" write "$THREAD" --kind note --by "$LABEL" --trust "$TRUST" "raw output tail: $TAIL" >/dev/null
+    "${BUS[@]}" write "$THREAD" --kind question --by "$LABEL" --needs-input --trust "$TRUST" \
       "The worker did not report a clean status line — review its output on this thread." >/dev/null
     echo "⚠️  worker gave no <<BUS …>> status — flagged for your review."
     ;;
