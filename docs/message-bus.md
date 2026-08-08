@@ -112,7 +112,25 @@ deep-work agent for a thread, then stops. Two calls shaped it: **manual continua
 (nothing continues without approval) and **orchestrator-only** (only Kairo spawns; a worker
 can't spawn workers).
 
-**The loop:**
+### Two spawn surfaces — same trust boundary (native panel added 2026-08-07, T125)
+
+`spawn-agent.sh` is the **headless** surface: the only path for cron/scheduled runs and
+one-milestone-then-pause work that must survive across sessions on the bus. Its downside for
+live work is that headless `claude -p` workers **don't populate Claude Code's native sub-agents
+panel** — the orchestrator only sees them on the board.
+
+For **interactive** fan-outs (a human is in the chat), staff workers with the native `Agent`
+tool, `subagent_type: "fleet-researcher"` (`.claude/agents/fleet-researcher.md`). These show in
+the native panel and stream back inline, and carry the **identical trust boundary** — the agent
+definition grants only `Read, Glob, Grep, WebSearch, WebFetch` (no Bash, no edit, no send), so an
+interactive worker that ingests untrusted web content still never holds a shell. Enforcement moves
+from the wrapper (`spawn-agent.sh` refusing bad `--tools`) to the agent frontmatter's fixed
+`tools:` list, but the guarantee is the same. Spawn several in one message for a parallel sweep;
+log anything durable to the bus so the board and cross-session record stay complete. The
+orchestrator-only and no-worker-spawns-workers rules hold on both surfaces (the agent's system
+prompt tells it not to fan out).
+
+**The loop (headless `spawn-agent.sh`):**
 1. `spawn-agent.sh <id>` reads the thread from the bus, injects its brief + full history +
    any steering into a focused worker prompt, and launches it through `run-agent.sh`.
 2. The worker does ONE coherent chunk and ends its output with a status line —

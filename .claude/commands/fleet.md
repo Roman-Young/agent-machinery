@@ -6,6 +6,16 @@ You are the **orchestrator** of the message bus — see the "multi-agent bus" se
 All commands run from `agent-machinery/`. **Always re-render the board after any change** so
 `$CONTEXT_DIR/local-only/bus.md` stays current.
 
+**Two ways to staff a worker — pick by session type:**
+- **Interactive (this chat, a human is here) → native `Agent` tool, `subagent_type: "fleet-researcher"`.**
+  These fill Claude's native sub-agents panel and stream back inline. Spawn several in ONE message
+  for a parallel sweep. Same trust boundary as headless (read-only: Read/Glob/Grep/WebSearch/WebFetch,
+  NO Bash/edit/send — enforced by the agent definition). Use this for research/audit fan-outs you're
+  driving live. Still log anything durable to the bus (`bus.py spawn`/`write`) so the board and the
+  cross-session record stay complete.
+- **Headless / scheduled / cross-session → `scripts/spawn-agent.sh`** (below). This is the only path
+  for cron runs and one-milestone-then-pause work that must survive across sessions on the bus.
+
 Map what I said ($ARGUMENTS) to the bus:
 
 - **"what's running" / no argument** → `python3 scripts/bus.py render`, then read
