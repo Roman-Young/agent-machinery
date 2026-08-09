@@ -125,14 +125,44 @@ START=$(date +%s)
 # jobs' droppings. Verified empirically 2026-07-24: with the flag no .jsonl is written;
 # without it, one is. A job's durable record is its OUTPUT in $LOG_FILE (below) — which
 # nightly-journal.sh now reads instead of headless transcripts.
-OUTPUT=$(timeout --kill-after=30s "$TIMEOUT_SEC" \
-  claude -p "$PROMPT" \
-    --no-session-persistence \
-    --allowedTools "${AGENT_ALLOWED_TOOLS:-Read,Glob,Grep}" \
-    --max-turns "${AGENT_MAX_TURNS:-25}" \
-    "$@" 2>>"$LOG_FILE")
-RC=$?
-ELAPSED=$(( $(date +%s) - START ))
+# ── RETRY ON FAST-FAIL (auth-blip absorber) ───────────────────────────────────
+# `claude -p` dying non-zero in a couple of seconds is the fingerprint of an OAuth token
+# refresh blip at launch, NOT a failure of the actual work (real runs take 30–400s). These
+# blips cluster at the ~8h token-refresh boundary — verified empirically 2026-08-09: 11 of
+# 14 failures over two weeks were rc=1 in ≤2s, and each cluster self-healed the next hour.
+# So: if a run fails FAST (< FAST_FAIL_SEC), sleep briefly and retry once — the refresh has
+# usually landed by then. A run that fails SLOW, or times out, is a real failure and is NOT
+# retried. Stderr is captured to a temp file so we can both keep it in the log AND inspect it
+# for the auth signature (which tells the hard sub-renewal case apart from a transient blip).
+FAST_FAIL_SEC="${AGENT_FAST_FAIL_SEC:-10}"
+RETRY_SLEEP_SEC="${AGENT_RETRY_SLEEP_SEC:-8}"
+MAX_ATTEMPTS=2
+ERR_FILE="$(mktemp)"
+trap 'rm -f "$ERR_FILE"' EXIT
+
+attempt=1
+while :; do
+  : > "$ERR_FILE"
+  OUTPUT=$(timeout --kill-after=30s "$TIMEOUT_SEC" \
+    claude -p "$PROMPT" \
+      --no-session-persistence \
+      --allowedTools "${AGENT_ALLOWED_TOOLS:-Read,Glob,Grep}" \
+      --max-turns "${AGENT_MAX_TURNS:-25}" \
+      "$@" 2>"$ERR_FILE")
+  RC=$?
+  ELAPSED=$(( $(date +%s) - START ))
+  cat "$ERR_FILE" >> "$LOG_FILE"
+
+  # Success, a genuine hang (timeout), or a SLOW failure → stop; only a fast non-zero retries.
+  if [[ $RC -eq 0 || $RC -eq 124 || $RC -eq 137 ]] \
+     || (( ELAPSED >= FAST_FAIL_SEC )) || (( attempt >= MAX_ATTEMPTS )); then
+    break
+  fi
+  echo "[$(date -Is)] job=$JOB_NAME fast-fail (rc=$RC, ${ELAPSED}s) — retrying in ${RETRY_SLEEP_SEC}s (attempt $((attempt+1))/$MAX_ATTEMPTS)" >> "$LOG_FILE"
+  sleep "$RETRY_SLEEP_SEC"
+  attempt=$((attempt+1))
+  START=$(date +%s)
+done
 
 # ── GUARD 5: FAIL LOUD ────────────────────────────────────────────────────────
 if [[ $RC -eq 124 || $RC -eq 137 ]]; then
@@ -141,8 +171,22 @@ if [[ $RC -eq 124 || $RC -eq 137 ]]; then
     "'$JOB_NAME' was killed after ${TIMEOUT_SEC}s. It hung — do NOT assume its output is complete. Check ~/.agent-logs/."
   exit 124
 elif [[ $RC -ne 0 ]]; then
-  echo "[$(date -Is)] job=$JOB_NAME FAILED (rc=$RC, ${ELAPSED}s)" >> "$LOG_FILE"
-  notify "⚠️ $JOB_NAME failed" "Exit $RC after ${ELAPSED}s. Check ~/.agent-logs/$(date +%F)-$JOB_NAME.log on the server."
+  echo "[$(date -Is)] job=$JOB_NAME FAILED (rc=$RC, ${ELAPSED}s, attempts=$attempt)" >> "$LOG_FILE"
+  # A fast failure that survived the retry, especially with the OAuth signature, is the HARD
+  # case: the refresh token itself is dead (typically after a Claude subscription renewal, which
+  # rotates the session). That needs a human to log in on the server and replace the token — no
+  # amount of retrying fixes it. Send a DISTINCT, actionable alert so re-auth-time is obvious
+  # and doesn't read like a random blip.
+  if grep -qiE 'oauth|could not be refreshed|session expired|authenticate|invalid.*token|unauthor' "$ERR_FILE"; then
+    notify "🔑 $JOB_NAME — RE-AUTH NEEDED" \
+"Claude's OAuth session on the server has expired and could NOT be refreshed (survived a retry).
+This usually happens after a Claude subscription renewal. Log into the server and replace the
+token — until you do, ALL scheduled jobs (triage, brief, etc.) will keep failing.
+
+Check: ~/.agent-logs/$(date +%F)-$JOB_NAME.log"
+  else
+    notify "⚠️ $JOB_NAME failed" "Exit $RC after ${ELAPSED}s (${attempt} attempt(s)). Check ~/.agent-logs/$(date +%F)-$JOB_NAME.log on the server."
+  fi
   exit "$RC"
 fi
 
