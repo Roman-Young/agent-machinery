@@ -40,11 +40,21 @@ JSON, immune to page-layout changes. The browser's only job is to hold the sessi
 
 ## The one-time login (and ~weekly re-auth)
 
+`canvas-login.sh` (2026-08-10: auto-discovers the target) collapses this to two human actions —
+run the tunnel, approve Duo. It queries the CDP `/json/list` endpoint server-side and prints the
+exact "inspect fallback" DevTools URL pre-selected on the live ucsd.edu tab (same loopback port
+both sides of the tunnel, so the URL computed on the server is valid once the tunnel's up) —
+no more manually opening `chrome://inspect`, adding the target under Configure, or hunting the
+target list for the right entry:
+
 1. On the Mac: `ssh -L 9333:127.0.0.1:9333 roman@<server>` (leave open).
-2. Mac Chrome → `chrome://inspect` → Configure → add `127.0.0.1:9333` → **inspect fallback** on the
-   canvas.ucsd.edu target (the remote Chrome is newer, so use *fallback*).
+2. Paste the URL `canvas-login.sh` printed straight into Mac Chrome's address bar.
 3. Log in → approve Duo push → **tick "remember this device."**
-4. Session lives in the profile. `canvas-login.sh` prints all of this on demand.
+4. Session lives in the profile.
+
+Falls back to the old manual path (chrome://inspect → Configure → add `127.0.0.1:9333` →
+**inspect fallback** on the target — the remote Chrome is newer, so use *fallback*) only if
+target auto-discovery fails (e.g. no matching tab is open yet).
 
 **Cadence:** UCSD Duo "remember this device" ≈ **7 days**, refreshable → expect a ~2-minute re-login
 roughly weekly. `canvas-sync` detects the lapse (fetch returns an SSO/HTML page or 401) and pushes an
