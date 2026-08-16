@@ -23,6 +23,7 @@
 #   09:00 local  =  16:00 UTC  |  17:00 UTC
 #   04:00 local  =  11:00 UTC  |  12:00 UTC
 #   03:30 local  =  10:30 UTC  |  11:30 UTC
+#   20:00 local  =  03:00 UTC  |  04:00 UTC   (next UTC day — see credit-card reminder)
 
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/roman/.npm-global/bin
 SHELL=/bin/bash
@@ -103,4 +104,11 @@ S=/home/roman/agent/agent-machinery/scripts
 @reboot          /home/roman/agent/agent-machinery/scripts/canvas-chrome.sh >> /home/roman/.agent-logs/canvas-chrome.log 2>&1
 */10 * * * *     /home/roman/agent/agent-machinery/scripts/canvas-chrome.sh >> /home/roman/.agent-logs/canvas-chrome.log 2>&1
 15 8,14,20 * * * /home/roman/agent/agent-machinery/scripts/canvas-sync.sh >> /home/roman/.agent-logs/canvas-sync.log 2>&1
+
+# ── CREDIT-CARD PAYMENT REMINDER — 20:00 local (8pm) on the 15th of each month ─
+# The card is due monthly on the 15th. Fire an alert-tier ntfy push at 8pm Pacific that
+# evening. 8pm Pacific is the NEXT UTC day (the 16th at 03:00 PDT / 04:00 PST), so the
+# day-of-month is 16 and the DST twin lands the correct one via run-local.sh's 20:00 check.
+0 3 16 * *      /home/roman/agent/agent-machinery/scripts/run-local.sh 20:00 /home/roman/agent/agent-machinery/scripts/notify.sh alert "💳 Pay the credit card" "Call and pay your credit card today — it's due on the 15th." >> /home/roman/.agent-logs/cron.log 2>&1
+0 4 16 * *      /home/roman/agent/agent-machinery/scripts/run-local.sh 20:00 /home/roman/agent/agent-machinery/scripts/notify.sh alert "💳 Pay the credit card" "Call and pay your credit card today — it's due on the 15th." >> /home/roman/.agent-logs/cron.log 2>&1
 # ─────────────────────────────────────────────────────────────────────────────
