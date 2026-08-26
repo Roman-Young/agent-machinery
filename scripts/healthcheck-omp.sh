@@ -70,46 +70,41 @@ else
   warn "skipped guardrail config checks (omp not on PATH)"
 fi
 
-# The delegate mechanism — prove the OPERATION, not just that run-agent.sh exists.
-# Real round trip against the REAL tasks.yaml (same "it's cheap and self-cleans"
-# reasoning the primary healthcheck uses for its real Gmail call) — never deletes,
-# always ends in done:, and is the ONE check that actually proves OMP can write
-# memory at all, not just that AGENTS.md correctly describes how it would.
-# NOTE: no outer `timeout` wrapper here on purpose. run-agent.sh already has its own
-# internal timeout (GUARD 2, default 600s) — that IS the choke point; a second, shorter
-# competing timeout around it would race against its own guard, kill the parent script
-# while an orphaned grandchild claude process keeps running detached (still holding the
-# lock), and misreport a real-but-slow success as a failure. Trust the one guard that's
-# actually designed for this instead of adding a second, uncoordinated one.
-if [[ -x "$SCRIPT_DIR/run-agent.sh" ]] && [[ -f "$REPO_DIR/.env" ]]; then
-  TAG="omp-hc-$(date +%s)"
-  # A single slow (~190s) rc=1 failure now and then is an observed characteristic of
-  # this multi-step delegated call (2026-08-24 — likely brushing --max-turns 25 on a
-  # longer exploration path), not proof the mechanism is broken — run-agent.sh already
-  # treats FAST failures this way (auth-blip retry); this extends the same "distinguish
-  # a flake from a real break" judgment to a slower failure mode. One bounded retry,
-  # same MAX_ATTEMPTS=2 shape as run-agent.sh's own guard — not unlimited.
-  ADD_OUT=""
-  for attempt in 1 2; do
-    ADD_OUT=$(cd "$AGENT_DIR" && AGENT_ALLOWED_TOOLS="Read,Edit,Write,Bash(python3 agent-machinery/scripts/render-tasks.py:*)" \
-      "$SCRIPT_DIR/run-agent.sh" omp-memory-write \
-      "Add a task to tasks.yaml: title='$TAG (OMP healthcheck round-trip, safe to ignore)', domain=other, urgency=green, due=null. Then run: python3 $SCRIPT_DIR/render-tasks.py. Reply with ONLY the assigned task ID (e.g. T150)." 2>/dev/null | tail -1 | grep -oE 'T[0-9]+')
-    [[ -n "$ADD_OUT" ]] && grep -q "id: $ADD_OUT" "$CTX/tasks.yaml" 2>/dev/null && break
-    [[ "$attempt" -eq 1 ]] && warn "delegate write attempt 1 failed — retrying once before treating this as a real failure"
-  done
-  if [[ -n "$ADD_OUT" ]] && grep -q "id: $ADD_OUT" "$CTX/tasks.yaml" 2>/dev/null; then
-    ok "delegate write round-trip: $ADD_OUT added and VERIFIED in tasks.yaml (not just self-reported)"
-    cd "$AGENT_DIR" && AGENT_ALLOWED_TOOLS="Read,Edit,Write,Bash(python3 agent-machinery/scripts/render-tasks.py:*)" \
-      "$SCRIPT_DIR/run-agent.sh" omp-memory-write \
-      "Move task $ADD_OUT to done: in tasks.yaml, done_date=today, trim notes to 'OMP healthcheck - confirmed working.' Then run: python3 $SCRIPT_DIR/render-tasks.py." >/dev/null 2>&1
-    grep -A1 "id: $ADD_OUT" "$CTX/tasks.yaml" | grep -q "done_date" \
-      && ok "delegate cleanup confirmed: $ADD_OUT moved to done: (not left dangling open)" \
-      || warn "$ADD_OUT added but cleanup to done: could not be verified — check tasks.yaml manually"
+# Prove OMP can actually WRITE memory — via the fast path it now uses (taskctl.py),
+# not the old delegate. History (2026-08-24): the delegate round-trip that used to live
+# here was slow (~190s) and failed ~40% of the time (a full context-load agent doing a
+# one-line edit, brushing --max-turns), which made this healthcheck itself slow and
+# prone to false reds. taskctl is deterministic: sub-second, no LLM, no flake.
+#
+# We run add->done against a COPY of the real tasks.yaml (same "test on a scratch copy"
+# discipline as the tasks.md re-render and bus round-trip checks above). This proves
+# THREE things at once: taskctl works, the REAL tasks.yaml is valid + taskctl-compatible
+# (we copied it), and — unlike the old delegate test — it pollutes the real done: list
+# with ZERO junk entries and spends none of the delegate's circuit-breaker budget.
+#
+# NOTE: this does NOT round-trip the run-agent.sh delegate path (still used for judgment
+# writes — log prose, approved skills). That path's guards are checked structurally under
+# BOUNDEDNESS; a full LLM round-trip is too flaky to belong in a healthcheck. Flagged, not
+# silently dropped.
+_present() { python3 -c "import yaml,sys; d=yaml.safe_load(open(sys.argv[1])) or {}; ids=[t.get('id') for t in d.get(sys.argv[3],[])]; sys.exit(0 if sys.argv[2] in ids else 1)" "$1" "$2" "$3"; }
+if [[ -x "$SCRIPT_DIR/taskctl.py" ]] && [[ -f "$CTX/tasks.yaml" ]]; then
+  HCTMP=$(mktemp -d)
+  cp "$CTX/tasks.yaml" "$HCTMP/tasks.yaml"
+  NID=$(python3 "$SCRIPT_DIR/taskctl.py" add --title "healthcheck selftest (scratch copy, never the real list)" \
+        --domain other --urgency green --notes "taskctl fast-path round-trip" --file "$HCTMP/tasks.yaml" 2>/dev/null)
+  if [[ -n "$NID" ]] && _present "$HCTMP/tasks.yaml" "$NID" tasks; then
+    if python3 "$SCRIPT_DIR/taskctl.py" done "$NID" --file "$HCTMP/tasks.yaml" >/dev/null 2>&1 \
+       && _present "$HCTMP/tasks.yaml" "$NID" done && ! _present "$HCTMP/tasks.yaml" "$NID" tasks; then
+      ok "taskctl write round-trip: add->done VERIFIED on a scratch copy of the real tasks.yaml ($NID) — fast path, no real-list pollution"
+    else
+      bad "🔴 taskctl 'done' failed — OMP's task-completion path is broken"
+    fi
   else
-    bad "🔴 delegate write round-trip FAILED — OMP cannot actually write memory, despite what AGENTS.md claims"
+    bad "🔴 taskctl 'add' failed — OMP cannot write tasks (the fast path AGENTS.md points at is broken)"
   fi
+  rm -rf "$HCTMP"
 else
-  warn "skipped the delegate round-trip (run-agent.sh missing/not executable, or .env missing)"
+  warn "skipped taskctl round-trip (taskctl.py or tasks.yaml missing)"
 fi
 
 # ── 2. DURABILITY ─────────────────────────────────────────────────────────────

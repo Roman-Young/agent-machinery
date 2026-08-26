@@ -62,14 +62,23 @@ hardcode paths or personal facts in this file; it lives in a public repo.)
 do — including deadlines.** Nothing actionable lives anywhere else. If you find an action
 item in another file, it is a bug: move it here and leave a pointer.
 
-**`tasks.md` is a GENERATED VIEW, not something you hand-edit.** It is produced from
-`tasks.yaml` by `agent-machinery/scripts/render-tasks.py`. Read `tasks.md` for the pretty,
-sorted, grouped view (that's the fast path for answering "what's on my plate"); **write**
-changes to `tasks.yaml`, then re-render:
+**`tasks.md` is a GENERATED VIEW, not something you hand-edit.** Read `tasks.md` for the
+pretty, sorted, grouped view (that's the fast path for answering "what's on my plate").
+**Mutate `tasks.yaml` through `taskctl.py`, not by hand-editing it** — it does the edit
+deterministically and re-renders `tasks.md` for you in one step:
 
 ```bash
-python3 agent-machinery/scripts/render-tasks.py
+python3 agent-machinery/scripts/taskctl.py add  --title "…" --domain work --urgency yellow [--due YYYY-MM-DD] [--project …] [--notes "…"]
+python3 agent-machinery/scripts/taskctl.py done T146 [--notes "short summary"]
+python3 agent-machinery/scripts/taskctl.py set  T146 due 2026-09-15     # reschedule / re-prioritize / re-domain
 ```
+
+`taskctl` enforces the rules below IN CODE (IDs come from `meta.next_id` and are never
+reused; `done` MOVES an entry to `done:`, never deletes; it auto-renders) — so a hand-edit
+can't forget one. It reads fresh, writes atomically, and refuses a malformed edit rather
+than corrupting the file. (Added 2026-08-25 — same "a script does the exact-work, the model
+does the judgment" principle as the renderer; it also lets the OMP terminal seat write
+tasks safely. `render-tasks.py` still runs standalone for a bare re-render.)
 
 **Why structured, not prose (2026-07-17):** the old system depended on you correctly
 parsing and re-sorting ~180 lines of free text every time something changed — the same
@@ -90,9 +99,9 @@ remember:
 | He says | You do |
 |---|---|
 | "what are my to-dos" / "what's on my plate" / "what should I do today" | Read `tasks.md` (already sorted red-first, grouped by domain). Lead with anything dated inside ~48h or flagged `⏰ OVERDUE`. **Do not dump the Done section at him.** Keep it scannable. |
-| "add X" | Append an entry to `tasks.yaml` under `tasks:` with **the next free ID** from `meta.next_id`, then increment that counter. Classify `domain`/`urgency` as best you can — he can correct it later, that's cheap now that it's a field, not a rewrite. Then **re-render**. |
-| "done X" / "finished X" / "X is done" | Move the entry from `tasks:` to `done:`, set `done_date` to today, **trim the notes to a short summary** (the full story belongs in the day's log, not duplicated here). **Never delete it.** Then re-render. |
-| "push X to next week" / "move X" | Update its `due:` field. Re-render. |
+| "add X" | `taskctl.py add --title "…" --domain … --urgency …` (classify `domain`/`urgency` as best you can — he can correct it later; that's cheap). taskctl assigns the next ID and re-renders for you. |
+| "done X" / "finished X" / "X is done" | `taskctl.py done <id> --notes "short summary"` (the full story belongs in the day's log, not here). It MOVES the entry to `done:` with today's date — **never deletes**. Refer to a task by ID, or look it up in `tasks.md` if he named it in words. |
+| "push X to next week" / "move X" | `taskctl.py set <id> due <YYYY-MM-DD>`. Re-renders automatically. |
 | "what's due this week" | Filter `tasks.yaml` on `due` falling in the next 7 days — or just read the rendered view, it's already sorted by due date within each urgency tier. |
 
 **Rules:**
