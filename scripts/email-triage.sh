@@ -42,6 +42,19 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
+# ══════════════════════════════════════════════════════════════════════════════
+# INTERNSHIP STATUS SYNC (added 2026-09-17, Roman's spec) — same trust-boundary rule
+# as the message bus: the agent below reads UNTRUSTED email and has no Bash/sheet
+# access, so it only PROPOSES a status signal as a plain output line; this script
+# (trusted, deterministic, runs outside the agent) is the only thing that writes the
+# sheet. Build the trusted "tracked applications" list BEFORE the agent runs, so the
+# agent can only match against real rows we already vetted — it can't invent one.
+# ══════════════════════════════════════════════════════════════════════════════
+TRACKED_APPS=""
+if [[ -x "$HOME/.venvs/sheets/bin/python3" ]]; then
+  TRACKED_APPS=$("$HOME/.venvs/sheets/bin/python3" "$SCRIPT_DIR/sheet_status_update.py" --list-open 2>/dev/null || true)
+fi
+
 # The tasks.md re-render at the end of this script runs OUTSIDE run-agent.sh (which sources
 # .env in its own subshell), so THIS script needs CONTEXT_DIR in its own environment. Without
 # it, render-tasks.py falls back to ./tasks.yaml — absent from cron's cwd — and EVERY hourly
@@ -105,6 +118,29 @@ STEP 4 — LABEL. For each thread, label_thread with BOTH its bucket label
 (triage/<bucket>) AND the triaged label. Every processed thread MUST get triaged, even junk
 — that is what stops it being re-processed next hour.
 
+STEP 4.5 — INTERNSHIP STATUS SIGNALS. Roman's tracked, currently-open internship
+applications (company | role | current status) are:
+${TRACKED_APPS:-(none right now — skip this step)}
+For each email, check whether it is a status signal from one of THESE EXACT companies —
+never invent a match, never match a company not on this list, and never match on company
+name alone (the signal phrasing below must actually be present):
+  - Rejection ('moving forward with other candidates', 'not selected', 'unable to proceed',
+    'decided not to continue', 'will not be moving forward') -> new status Rejected
+  - Interview / OA invite ('schedule a call', 'phone screen', 'technical interview', 'next
+    round', 'online assessment', 'complete your assessment') -> new status Interview
+  - Application acknowledged ('we've received your application', 'thank you for applying')
+    on a row currently 'Applying' -> new status Applied. On any other current status this is
+    noise, skip it.
+  - Offer ('pleased to offer', 'extend an offer', 'offer letter') -> NEVER a status line below;
+    instead APPEND a RED task to tasks.yaml right now (same mechanics as Step 5) titled
+    'OFFER: <company> — <role>' with notes citing the subject and 'needs your decision, see
+    /outcome in ai-job-search or reply to the email yourself'. This is the one signal Kairo
+    never auto-records as a status — accepting/declining is your call, not an inference.
+  - No confident match to one of the exact companies above, or the company genuinely isn't
+    on the list -> do nothing, it's not an internship-status signal.
+Classify from the full thread body (get_thread), never the snippet/subject alone — that's
+how 'we'd like to schedule a call' gets told apart from 'thanks for applying'.
+
 STEP 5 — TASKS. For each email in URGENT or action that requires Roman to DO something
 (reply-only emails do NOT count), APPEND one task to tasks.yaml:
   - Use the next free id from meta.next_id, then INCREMENT meta.next_id by 1 for the next.
@@ -113,7 +149,7 @@ STEP 5 — TASKS. For each email in URGENT or action that requires Roman to DO s
   - due: the ISO date if the email states/implies one, else null.
   - status: open. notes: one line — what it is and why it matters, + 'from email: <sender>'.
   - ONLY APPEND. Never edit, reorder, or delete an existing task. Do NOT run any renderer.
-If nothing needs a task, change nothing in tasks.yaml.
+If nothing needs a task (including no offer this run), change nothing in tasks.yaml.
 
 STEP 6 — OUTPUT. Line 1 MUST be exactly:
 SOURCES: gmail=ok
@@ -122,8 +158,11 @@ agreeable; a false ok is the worst outcome.
 Then, ONE line per NEWLY-TRIAGED email, in this EXACT pipe format (this is parsed by a script):
 BUCKET|sender|subject|one-line reason + what Roman should do
 where BUCKET is one of URGENT REPLY ACTION OTHER JUNK (uppercase). Put URGENT lines first.
+Then, ONE line per Step 4.5 match (omit entirely if none this run), in this EXACT format:
+INTERNSHIP|<exact company from the list>|<role from the list>|<new status>|<short signal label>|<email subject>|<email date YYYY-MM-DD>
 If nothing new: output the coverage line then a single line: NONE|-|-|no new mail.
-Do not modify any files other than tasks.yaml. Be terse.")
+Do not modify any files other than tasks.yaml (and only for URGENT/action tasks or an Offer
+this step found). Be terse.")
 
 # ── Coverage check: a triage we can't trust is not trusted. ──────────────────
 if ! grep -qi 'gmail=ok' <<<"$OUT"; then
@@ -156,5 +195,36 @@ while IFS='|' read -r bucket sender subject reason; do
 
 ${reason:-needs your attention}" || true
 done < <(grep -E '^URGENT\|' <<<"$OUT" || true)
+
+# ── Internship status sync: write Step 4.5's matches, then tell Roman what changed. ──
+# Deterministic step (this script, not the agent) does the actual write — see the
+# trust-boundary note above. `fyi` tier: informative, not something that needs a reaction.
+INTERNSHIP_LINES=$(grep -E '^INTERNSHIP\|' <<<"$OUT" || true)
+if [[ -n "$INTERNSHIP_LINES" && -x "$HOME/.venvs/sheets/bin/python3" ]]; then
+  ITEMS_JSON=$(python3 -c "
+import json, sys
+items = []
+for line in sys.stdin.read().splitlines():
+    parts = line.split('|')
+    if len(parts) != 7:
+        continue
+    _, company, role, status, signal, subject, date = parts
+    items.append({'company': company, 'role_hint': role, 'new_status': status,
+                   'signal': signal, 'source': subject, 'date': date})
+print(json.dumps(items))
+" <<<"$INTERNSHIP_LINES")
+  if [[ "$ITEMS_JSON" != "[]" ]]; then
+    SYNC_OUT=$("$HOME/.venvs/sheets/bin/python3" "$SCRIPT_DIR/sheet_status_update.py" "$ITEMS_JSON" 2>&1 || true)
+    WROTE_COUNT=$(grep -cE '^WROTE\|' <<<"$SYNC_OUT" || true)
+    if [[ "$WROTE_COUNT" -gt 0 ]]; then
+      "$SCRIPT_DIR/notify.sh" fyi "📋 Internship tracker updated ($WROTE_COUNT)" "$SYNC_OUT" || true
+    fi
+    # Anything that wasn't a clean write (conflict/ambiguous/no-match) — worth a look,
+    # but not urgent; surfaced so a bad match gets caught, not silently swallowed.
+    if grep -qE '^(CONFLICT|AMBIGUOUS|NO_MATCH)\|' <<<"$SYNC_OUT"; then
+      "$SCRIPT_DIR/notify.sh" fyi "📋 Internship sync: needs a look" "$SYNC_OUT" || true
+    fi
+  fi
+fi
 
 echo "[triage] $(grep -cE '^[A-Z]+\|' <<<"$OUT" || echo 0) triaged, $URGENT_COUNT urgent pushed"
