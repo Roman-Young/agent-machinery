@@ -108,28 +108,44 @@ def row_for(e, cat, today):
 
 
 def ensure_dashboard(sh, ws):
-    """A small Dashboard tab + a Status dropdown. Idempotent."""
+    """A small Dashboard tab + a Status dropdown. Idempotent and REORDER-SAFE.
+
+    Every column reference (formulas + the dropdown range) is resolved from the LIVE
+    header by name, never a hardcoded letter — so if Roman reorders the columns, the
+    next run rebuilds the dashboard and re-anchors the dropdown to the real Status
+    column instead of silently counting the wrong one. (2026-09-20: it used to hardcode
+    column N for Status; a reorder moved Status to L and broke every status count.)"""
     t = ws.title.replace("'", "''")
+    header = ws.row_values(1)
+    hi = {h: i for i, h in enumerate(header)}
+    if "Status" not in hi:
+        return
+    # A1-letter for a named column on the live sheet; falls back to a sane default only
+    # if a column is somehow missing so the dashboard degrades rather than crashing.
+    def L(name, default):
+        return col_letter(hi[name]) if name in hi else default
+    prio, cat, link, dl, st = L("Priority", "A"), L("Category", "K"), L("Apply link", "J"), L("Deadline", "F"), L("Status", "L")
+    rows = [["Metric", "Count", "Status options: " + " → ".join(STATUS_OPTIONS)],
+            ["Total postings", f"=COUNTA('{t}'!{link}2:{link})", ""],
+            ["⭐ Priority", f"=COUNTIF('{t}'!{prio}2:{prio},\"*PRIORITY*\")", ""],
+            ["Summer-eligible", f"=COUNTIF('{t}'!{cat}2:{cat},\"Summer-eligible\")", ""],
+            ["Applying", f"=COUNTIF('{t}'!{st}2:{st},\"Applying\")", ""],
+            ["Applied", f"=COUNTIF('{t}'!{st}2:{st},\"Applied\")", ""],
+            ["Interview", f"=COUNTIF('{t}'!{st}2:{st},\"Interview\")", ""],
+            ["Offer", f"=COUNTIF('{t}'!{st}2:{st},\"Offer\")", ""],
+            ["Deadlines in next 7 days (not yet applied)",
+             f"=COUNTIFS('{t}'!{dl}2:{dl},\">=\"&TODAY(),'{t}'!{dl}2:{dl},\"<=\"&TODAY()+7,'{t}'!{st}2:{st},\"<>Applied\")", ""],
+            ["Deadlines in next 30 days", f"=COUNTIFS('{t}'!{dl}2:{dl},\">=\"&TODAY(),'{t}'!{dl}2:{dl},\"<=\"&TODAY()+30)", ""],
+            ["Overdue (not applied)", f"=COUNTIFS('{t}'!{dl}2:{dl},\"<\"&TODAY(),'{t}'!{dl}2:{dl},\"<>\",'{t}'!{st}2:{st},\"<>Applied\")", ""]]
     try:
-        sh.worksheet("Dashboard")
+        d = sh.worksheet("Dashboard")
     except Exception:
         d = sh.add_worksheet("Dashboard", rows=20, cols=3)
-        rows = [["Metric", "Count", "Status options: " + " → ".join(STATUS_OPTIONS)],
-                ["Total postings", f"=COUNTA('{t}'!J2:J)", ""],
-                ["⭐ Priority", f"=COUNTIF('{t}'!A2:A,\"*PRIORITY*\")", ""],
-                ["Summer-eligible", f"=COUNTIF('{t}'!K2:K,\"Summer-eligible\")", ""],
-                ["Applying", f"=COUNTIF('{t}'!N2:N,\"Applying\")", ""],
-                ["Applied", f"=COUNTIF('{t}'!N2:N,\"Applied\")", ""],
-                ["Interview", f"=COUNTIF('{t}'!N2:N,\"Interview\")", ""],
-                ["Offer", f"=COUNTIF('{t}'!N2:N,\"Offer\")", ""],
-                ["Deadlines in next 7 days (not yet applied)",
-                 f"=COUNTIFS('{t}'!F2:F,\">=\"&TODAY(),'{t}'!F2:F,\"<=\"&TODAY()+7,'{t}'!N2:N,\"<>Applied\")", ""],
-                ["Deadlines in next 30 days", f"=COUNTIFS('{t}'!F2:F,\">=\"&TODAY(),'{t}'!F2:F,\"<=\"&TODAY()+30)", ""],
-                ["Overdue (not applied)", f"=COUNTIFS('{t}'!F2:F,\"<\"&TODAY(),'{t}'!F2:F,\"<>\",'{t}'!N2:N,\"<>Applied\")", ""]]
-        d.update(values=rows, range_name="A1", value_input_option="USER_ENTERED")
-    # Status dropdown on column N (index 13), rows 2..2000
+    d.update(values=rows, range_name="A1", value_input_option="USER_ENTERED")   # refresh every run — picks up a reorder
+    # Status dropdown, anchored to the live Status column (was hardcoded col N / index 13).
+    st_idx = hi["Status"]
     sh.batch_update({"requests": [{"setDataValidation": {
-        "range": {"sheetId": ws.id, "startRowIndex": 1, "endRowIndex": 2000, "startColumnIndex": 13, "endColumnIndex": 14},
+        "range": {"sheetId": ws.id, "startRowIndex": 1, "endRowIndex": 2000, "startColumnIndex": st_idx, "endColumnIndex": st_idx + 1},
         "rule": {"condition": {"type": "ONE_OF_LIST", "values": [{"userEnteredValue": v} for v in STATUS_OPTIONS]},
                  "showCustomUi": True, "strict": False}}}]})
 
@@ -147,14 +163,20 @@ def sort_sheet(ws):
         return
     hdr, rows = vals[0], vals[1:]
     w = len(hdr)
+    # Resolve every column by header NAME, not a hardcoded index — reorder-safe. (2026-09-20:
+    # this used r[13] for Status, which a reorder had turned into the Source column, silently
+    # killing the "finished rows sink to the bottom" behaviour.)
+    hi = {h: i for i, h in enumerate(hdr)}
+    i_status, i_dl = hi.get("Status", 13), hi.get("Deadline", 5)
+    i_prio, i_fit, i_co = hi.get("Priority", 0), hi.get("Fit", 1), hi.get("Company", 2)
 
     def key(r):
         r = r + [""] * (w - len(r))
-        status = r[13].strip().lower()
+        status = r[i_status].strip().lower()
         done = 1 if status in ("applied", "rejected", "skip") else 0   # finished rows sink to the bottom
-        dl = r[5][:10]
+        dl = r[i_dl][:10]
         dl = dl if re.match(r"\d{4}-\d{2}-\d{2}$", dl) else "9999-99-99"   # dated first, blanks last
-        return (done, 0 if "PRIORITY" in r[0] else 1, FIT_ORDER.get(r[1], 9), dl, r[2].lower())
+        return (done, 0 if "PRIORITY" in r[i_prio] else 1, FIT_ORDER.get(r[i_fit], 9), dl, r[i_co].lower())
 
     rows.sort(key=key)
     ws.update(values=[hdr] + [r + [""] * (w - len(r)) for r in rows],
@@ -218,6 +240,13 @@ def main():
             to_append.append(row)
 
     if to_append:
+        # row_for() builds rows in the HEADER-constant order; append_rows writes positionally
+        # from column A, so a NEW row must first be reordered into the sheet's LIVE header
+        # order. Skipping this is exactly what scrambled 25 rows on 2026-09-19 after Roman
+        # reordered the columns (Source/First-seen landed in Status/My-notes). Updates to
+        # existing rows were already name-addressed and unaffected.
+        hpos = {h: i for i, h in enumerate(HEADER)}
+        to_append = [[r[hpos[h]] if h in hpos else "" for h in header] for r in to_append]
         ws.append_rows(to_append, value_input_option="USER_ENTERED")
     if updates:
         for i in range(0, len(updates), 200):
