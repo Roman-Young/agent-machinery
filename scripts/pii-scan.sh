@@ -28,7 +28,36 @@ ALLOW_EMAIL='(git@github\.com|noreply@|no-reply@|example\.(com|org)|user@example
 
 HITS=""
 
+# WHICH FILES: exactly what a push could publish. In a git work tree that's the tracked files
+# plus untracked files that aren't gitignored (= what `git add -A` picks up). A gitignored file
+# (.env, local-only/) can never leave the box, so it isn't checked: flagging .env's own
+# addresses made this gate cry wolf every night from 2026-09-21 to 2026-10-11, the exact
+# failure mode described above. If .env ever stops being ignored, it lands in this list and
+# gets flagged. Outside a git repo, every file is checked.
+publishable() {
+  if git -C "$TARGET" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git -C "$TARGET" ls-files --cached --others --exclude-standard -z \
+      | while IFS= read -r -d '' rel; do printf '%s\n' "$TARGET/$rel"; done
+  else
+    find "$TARGET" -type f -not -path '*/.git/*' 2>/dev/null
+  fi | grep -vE '/(deprecated|node_modules)/|/example\.env$|\.bak[^/]*$|/pii-scan\.sh$'
+}
+
 while IFS= read -r f; do
+  [[ -f "$f" ]] || continue   # tracked but deleted in the work tree
+
+  # Secrets: a credentials-looking FILE, or a token in a known high-precision format. The
+  # identifier checks below don't catch keys; an untracked ".env.save" (2026-10-11) showed a
+  # copy of the secrets file could otherwise slip through. Only a token's first 12 characters
+  # are printed, because these hits go into the backup log and a phone notification.
+  case "${f##*/}" in
+    .env|.env.*|*.pem|*.key|*.p12|*.pfx|id_rsa*|id_ed25519*|id_ecdsa*)
+      HITS+="$f: secrets-like file would be published"$'\n' ;;
+  esac
+  while IFS= read -r tok; do
+    HITS+="$f: possible secret token → ${tok:0:12}…"$'\n'
+  done < <(grep -oIE 'ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{50,}|sk-ant-[A-Za-z0-9_-]{20,}|sk-proj-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{40,}|xox[abprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|-----BEGIN [A-Z ]*PRIVATE KEY-----' "$f" 2>/dev/null | sort -u)
+
   # Public IPv4 that isn't loopback/private/well-known-DNS, and isn't a version string.
   while IFS= read -r ip; do
     [[ "$ip" =~ $ALLOW_IP ]] && continue
@@ -46,11 +75,7 @@ while IFS= read -r f; do
     [[ "$sh" =~ (git@github|user@|you@|\$\{|\$SERVER) ]] && continue
     HITS+="$f: possible ssh target → $sh"$'\n'
   done < <(grep -oIE 'ssh[a-z-]* [a-z][a-z0-9_-]+@[a-zA-Z0-9.-]+' "$f" 2>/dev/null | sort -u)
-done < <(
-  find "$TARGET" -type f \
-    -not -path '*/.git/*' -not -path '*/deprecated/*' -not -path '*/node_modules/*' \
-    -not -name 'example.env' -not -name '*.bak*' -not -name 'pii-scan.sh' 2>/dev/null
-)
+done < <(publishable)
 
 if [[ -n "$HITS" ]]; then
   printf '%s' "$HITS" | sort -u

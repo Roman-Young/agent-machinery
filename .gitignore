@@ -17,3 +17,7 @@ __pycache__/
 *.env
 !example.env
 secrets*
+# Editor backups / copies of the secrets file (nano writes ".env.save"). One appeared on
+# 2026-10-11 and matched none of the rules above, so the next push would have published it.
+.env.*
+*.save
