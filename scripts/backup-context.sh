@@ -88,6 +88,22 @@ if [[ $MACHINERY_BLOCKED -eq 0 ]]; then
   fi
 fi
 
+# ── 3b. opted-in workspace repos — push COMMITTED work only ──────────────────
+# A repo in codebases/ opts in with `git config kairo.autopush true` (no repo names in this
+# public script). Push only: never add/commit, because uncommitted work is the owner's
+# in-progress editing (e.g. a diff an editor is showing against a base) and must stay put.
+for repo in "${CODEBASES_DIR:-$HOME/agent/codebases}"/*/; do
+  [[ "$(git -C "$repo" config --get kairo.autopush 2>/dev/null)" == "true" ]] || continue
+  name="$(basename "$repo")"
+  if git -C "$repo" push -q origin HEAD 2>/dev/null; then
+    echo "✅ $name pushed (committed work only)"
+  else
+    echo "🔴 $name push FAILED"
+    notify "🔴 BACKUP FAILED — $name" "Could not push $name. Its committed work has no current offsite copy. Check its deploy key."
+    FAILED=1
+  fi
+done
+
 # ── 4. local-only/ — git CANNOT save this. A tarball is its only copy. ────────
 BACKUP_DIR="${BACKUP_DIR:-$HOME/backups}"
 mkdir -p "$BACKUP_DIR"
