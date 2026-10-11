@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# kairo — open Kairo on the Mac: the live seat (omp on the server) on top, an instant local
+# typing box underneath. Type, press Enter, the whole message lands in omp in one round trip.
+#
+#   kairo           open (or re-open) the split
+#   kairo stop      close the split on this Mac (the seat on the server keeps running)
+#   kairo restart   restart the seat on the server too (omp resumes the same conversation)
+#
+# Top half: the real harness. Read replies there; scroll with the mouse wheel (it scrolls the
+# seat's own history); click it for menus. Bottom half: kairo-compose (`:help` inside it).
+# To copy text out of the top half: ⌘R (Terminal: toggle mouse reporting), select, ⌘C, ⌘R.
+#
+# The top half connects with ssh in a reconnect loop: unlike mosh, ssh carries mouse-wheel
+# events through to the seat, so scrollback works. mosh (survives roaming, no scrollback) is
+# available with KAIRO_VIEW=mosh or `echo mosh > ~/.config/kairo/view`.
+#
+# Config: ~/.config/kairo/server = user@host (or an ssh alias). Local tmux runs on a private
+# socket with prefix Ctrl-] (Ctrl-a stays "start of line" in the typing box); the seat's own
+# tmux keeps Ctrl-b. Works with macOS's bash 3.2.
+set -euo pipefail
+
+CONF_DIR="$HOME/.config/kairo"
+SERVER="${KAIRO_SERVER:-$(cat "$CONF_DIR/server" 2>/dev/null || true)}"
+VIEW_MODE="${KAIRO_VIEW:-$(cat "$CONF_DIR/view" 2>/dev/null || echo ssh)}"
+SOCK="kairo-mac"
+SESS="kairo"
+BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REMOTE_SEAT="${KAIRO_REMOTE_SEAT:-agent/agent-machinery/scripts/kairo-term.sh}"
+
+die() { echo "kairo: $*" >&2; exit 1; }
+tm()  { tmux -u -L "$SOCK" "$@"; }
+q()   { printf '%q' "$1"; }
+
+case "${1:-}" in
+  stop)
+    tm kill-session -t "=$SESS" 2>/dev/null && echo "kairo: closed on this Mac (the seat on the server is still running)." \
+      || echo "kairo: nothing open."
+    exit 0 ;;
+  restart)
+    [[ -n "$SERVER" ]] || die "no server set — echo user@host > ~/.config/kairo/server"
+    tm kill-session -t "=$SESS" 2>/dev/null || true
+    ssh -o ConnectTimeout=8 "$SERVER" 'tmux -L kairo kill-session -t =kairo 2>/dev/null; echo "seat stopped"' || die "couldn't reach $SERVER"
+    exec "$0" ;;
+  ""|open) ;;
+  *) die "unknown command '$1' (open | stop | restart)" ;;
+esac
+
+command -v tmux >/dev/null || die "tmux missing — brew install tmux"
+[[ -n "$SERVER" ]] || die "no server set — echo user@host > ~/.config/kairo/server"
+
+# Top pane. KAIRO_VIEW_CMD is a test seam.
+if [[ -n "${KAIRO_VIEW_CMD:-}" ]]; then
+  VIEW="$KAIRO_VIEW_CMD"
+elif [[ "$VIEW_MODE" == mosh ]] && command -v mosh >/dev/null; then
+  VIEW="while :; do mosh $(q "$SERVER") -- $(q "$REMOTE_SEAT"); echo '[seat view closed — reconnecting in 3 s · close the window to stop]'; sleep 3; done"
+else
+  VIEW="while :; do ssh -t -o ConnectTimeout=8 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 $(q "$SERVER") $(q "$REMOTE_SEAT"); echo '[seat view closed — reconnecting in 3 s · close the window to stop]'; sleep 3; done"
+fi
+# Bottom pane: the typing box, restarted if it ever exits (Ctrl-D, crash).
+COMPOSE="while :; do $(q "$BIN_DIR/kairo-compose"); echo '[typing box restarting…]'; sleep 1; done"
+
+if ! tm has-session -t "=$SESS" 2>/dev/null; then
+  cols=$(tput cols 2>/dev/null || echo 120); lines=$(tput lines 2>/dev/null || echo 40)
+  tm -f /dev/null new-session -d -s "$SESS" -x "$cols" -y "$lines" "$VIEW"
+  tm set -g prefix 'C-]'; tm unbind C-b; tm bind 'C-]' send-prefix
+  tm set -g mouse on; tm set -g status off; tm set -g escape-time 10
+  tm set -g pane-border-style fg=colour238; tm set -g pane-active-border-style fg=colour39
+  tm set -g history-limit 50000; tm set -g focus-events on
+  tm split-window -v -l 6 -t "=$SESS:" "$COMPOSE"     # bottom: 6 lines, gets focus
+fi
+
+[[ -t 1 ]] || { echo "kairo: opened (not attaching — no terminal)."; exit 0; }
+TMUX='' exec tmux -u -L "$SOCK" attach -t "=$SESS"

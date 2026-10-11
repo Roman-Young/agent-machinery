@@ -1,0 +1,25 @@
+# omp-seat-overlay.yml — settings applied ONLY to the persistent terminal seat (kairo-term.sh
+# passes it as `omp --config <this file>`). An overlay is read-only and per-process: it never
+# rewrites the owner's ~/.omp/agent/config.yml, and anything set in /settings still applies
+# except the keys below. Every key was checked against the installed omp's schema.
+
+# ── Needed for the compose overlay to deliver messages reliably ──────────────────────
+paste:
+  # Pastes of ≥100 lines (the default) open a "wrap as block?" menu, so the following Enter can
+  # pick a menu option instead of submitting. Effectively disable the menu for the seat.
+  largeMenuThreshold: 1000000
+tui:
+  # Default "rebuild" erases scrollback and replays the transcript on every resize — over a
+  # remote link that's a full redraw each time the window changes size.
+  resizeScrollback: preserve
+terminal:
+  # Inline images don't survive the remote/tmux path; show them as placeholders.
+  showImages: false
+
+# ── Server protection (not preferences) ──────────────────────────────────────────────
+task:
+  maxConcurrency: 3        # stock 32; each subagent is a ~250 MB process on a small box → OOM
+dev:
+  autoqa: false            # stock on: can POST model-written tool reports + install id off-box
+secrets:
+  enabled: true            # redact credential-shaped tokens before they reach the model

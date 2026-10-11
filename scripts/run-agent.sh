@@ -50,6 +50,32 @@ fi
 [[ -n "$_CALLER_TOOLS" ]] && AGENT_ALLOWED_TOOLS="$_CALLER_TOOLS"
 [[ -n "$_CALLER_TURNS" ]] && AGENT_MAX_TURNS="$_CALLER_TURNS"
 
+# ── GUARD 6: TOOL SURFACE — the real trust boundary (added 2026-10-11) ────────
+# --allowedTools only PRE-APPROVES tools; it never removes one. ~/.claude/settings.json allows
+# Bash (and runs acceptEdits) for interactive work, and that user-level policy applies to every
+# headless run too — so until now EVERY job here, including the ones that read untrusted email
+# and web content, could run a shell. Proven 2026-10-11 by side effect: a probe launched with
+# --allowedTools "Read,Glob,Grep" created a file via Bash. --tools is what actually removes
+# built-in tools from the model. Derive it from the job's own allow-list so each job keeps exactly
+# the built-ins it names: MCP tools pass through untouched (--tools governs built-ins only), and a
+# scoped rule like "Bash(git add *)" contributes "Bash". A caller-set AGENT_TOOLS overrides this.
+# healthcheck.sh exercises it weekly with a behavioural probe (config can look right and be wrong).
+if [[ -z "${AGENT_TOOLS+x}" ]]; then
+  AGENT_TOOLS=""
+  IFS=',' read -ra _RULES <<< "${AGENT_ALLOWED_TOOLS:-Read,Glob,Grep}"
+  for _r in "${_RULES[@]}"; do
+    _r="${_r//[[:space:]]/}"; _r="${_r%%(*}"
+    [[ -z "$_r" || "$_r" == mcp__* ]] && continue
+    [[ ",$AGENT_TOOLS," == *",$_r,"* ]] || AGENT_TOOLS="${AGENT_TOOLS:+$AGENT_TOOLS,}$_r"
+  done
+fi
+# MCP half of the same boundary: the claude.ai connectors load into EVERY headless run, and the
+# user-level allow list pre-approves their read tools (Gmail/Drive/Granola/Calendar reads). A job
+# that fetches web pages could therefore read private mail and carry it out via WebFetch. A job
+# whose allow-list names no MCP tool gets --strict-mcp-config, which drops every connector.
+_MCP_FLAG=()
+[[ "${AGENT_ALLOWED_TOOLS:-}" == *mcp__* ]] || _MCP_FLAG=(--strict-mcp-config)
+
 JOB_NAME="${1:?usage: run-agent.sh <job-name> <prompt> [flags...]}"
 PROMPT="${2:?usage: run-agent.sh <job-name> <prompt> [flags...]}"
 shift 2
@@ -116,7 +142,7 @@ cd "$CONTEXT_DIR"   # run from the context repo so CLAUDE.md + relative paths re
 # ── GUARD 2 + 4: TIMEOUT and TURN CAP ─────────────────────────────────────────
 TIMEOUT_SEC="${AGENT_TIMEOUT_SEC:-600}"
 
-echo "[$(date -Is)] job=$JOB_NAME starting (run $COUNT/$MAX_RUNS_PER_DAY today, timeout ${TIMEOUT_SEC}s)" >> "$LOG_FILE"
+echo "[$(date -Is)] job=$JOB_NAME starting (run $COUNT/$MAX_RUNS_PER_DAY today, timeout ${TIMEOUT_SEC}s, tools: ${AGENT_TOOLS:-<none>}, mcp: $([[ ${#_MCP_FLAG[@]} -gt 0 ]] && echo none || echo job-listed))" >> "$LOG_FILE"
 START=$(date +%s)
 
 # --no-session-persistence: headless runs used to leave a FULL transcript in
@@ -146,6 +172,8 @@ while :; do
   OUTPUT=$(timeout --kill-after=30s "$TIMEOUT_SEC" \
     claude -p "$PROMPT" \
       --no-session-persistence \
+      --tools "$AGENT_TOOLS" \
+      ${_MCP_FLAG[@]+"${_MCP_FLAG[@]}"} \
       --allowedTools "${AGENT_ALLOWED_TOOLS:-Read,Glob,Grep}" \
       --max-turns "${AGENT_MAX_TURNS:-25}" \
       "$@" 2>"$ERR_FILE")

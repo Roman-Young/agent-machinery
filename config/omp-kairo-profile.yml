@@ -1,0 +1,118 @@
+# omp-kairo-profile.yml — hardened config for the Kairo terminal seat under omp.
+#
+# INSTALL (one time; see docs/terminal-seat.md, phase B):
+#   mkdir -p ~/.omp/profiles/kairo/agent
+#   cp agent-machinery/config/omp-kairo-profile.yml ~/.omp/profiles/kairo/agent/config.yml
+#   scripts/omp-seat-check.sh          # verifies every value below actually took effect
+#
+# WHY A NAMED PROFILE: a profile isolates auth, sessions, settings and agent.db from any
+# other omp use on the box (OMP_PROFILE=kairo). ~/.claude is NOT profile-scoped.
+#
+# Every key below was validated against the installed omp's own schema
+# (`omp config list --json`). omp moves fast (~1.5 releases/day in the audited window, a
+# quarter of them with breaking changes) — re-run omp-seat-check.sh after ANY upgrade.
+# Stock defaults this file overrides are noted inline; "stock" = omp's shipped default.
+
+# ── Models ────────────────────────────────────────────────────────────────────────
+# Pin every role, so background jobs (titles, cheap subagents, compaction) can't route to
+# whichever other provider happens to be authenticated and take conversation text with them.
+# Auth for these is an Anthropic API KEY — never a subscription login (kairo-term.sh
+# refuses to start if one is stored; see its omp_guard).
+modelRoles:
+  default: anthropic/claude-sonnet-5
+  smol: anthropic/claude-haiku-4-5
+  slow: anthropic/claude-opus-5
+
+# ── Approval: honour "irreversible/outward actions always pause" ──────────────────
+# Tiers: read / write / exec.  `write` mode auto-approves read+write, prompts on exec.
+# (stock: yolo — prompts for NOTHING.)
+# kairo-term.sh ALSO passes --approval-mode on the command line: a runtime flag can't be
+# overridden by a config-file edit, which closes the "model rewrites its own config to
+# yolo" path. The explicit per-tool `prompt` policies below are the second layer: a user
+# policy is enforced even under yolo.
+# Stricter option for a personal-data seat: `always-ask` (also prompts on file writes).
+tools:
+  approvalMode: write
+  approval:
+    bash: prompt
+    eval: prompt      # eval's python/js kernels can spawn a shell that bash.patterns never sees
+    task: prompt      # subagent spawns
+  # Any MCP server added later declares tier `write` → it would AUTO-APPROVE in this mode.
+  # Before adding one that can send/submit/buy, add `mcp__<name>: prompt` here.
+
+bash:
+  patterns:
+    - match: rm -rf
+      approval: deny
+    - match: "rm -r "
+      approval: deny
+    - match: git reset --hard
+      approval: deny
+    - match: git clean -f
+      approval: deny
+    - match: "git checkout -- "
+      approval: deny
+    - match: git push --force
+      approval: prompt
+    - match: git push -f
+      approval: prompt
+
+# ── Untrusted-content ingestion: OFF in the shell-holding seat ────────────────────
+# The system's trust boundary: whatever ingests web/email content must not hold a shell.
+# omp enables all three by default in the same context as bash, and web_search's default
+# chain sends queries to keyless third-party backends. Web research belongs to the
+# no-shell fleet workers (spawn-agent.sh / the bus), not this seat.  (stock: all true)
+web_search:
+  enabled: false
+fetch:
+  enabled: false
+browser:
+  enabled: false
+computer:
+  enabled: false
+github:
+  enabled: false
+
+# ── Egress / phoning home ─────────────────────────────────────────────────────────
+dev:
+  autoqa: false            # stock: true — auto-QA can POST model-written reports + install id
+startup:
+  checkUpdate: false       # pinned version; upgrades are deliberate (see docs)
+marketplace:
+  autoUpdate: "off"        # stock: notify
+
+# ── Secrets ───────────────────────────────────────────────────────────────────────
+# Redacts credential-shaped tokens before they reach the model. It is NOT a read
+# restriction: omp does not honour Claude Code's permissions.deny (e.g. Read(**/.env)),
+# and `read` is auto-approved in every mode.  (stock: false)
+secrets:
+  enabled: true
+
+# ── Memory: the file-based context repo is the only memory ────────────────────────
+memory:
+  backend: "off"
+autolearn:
+  enabled: false
+
+# ── Resources: ~8 GB box ──────────────────────────────────────────────────────────
+task:
+  maxConcurrency: 3        # stock: 32 — each subagent is a process (~250 MB) → OOM
+# lsp.enabled stays on (code intelligence is the point of a coding seat); if RAM gets
+# tight, launch with --no-lsp.
+
+# ── Claude-side assets this seat may reuse ────────────────────────────────────────
+skills:
+  enableClaudeUser: true   # ~/.claude/skills (e.g. humanizer); explicit — the default flips across versions
+commands:
+  enableClaudeUser: true
+
+# ── Notifications ─────────────────────────────────────────────────────────────────
+# Terminal bell / OSC on turn end (passes through tmux: allow-passthrough is on in
+# tmux-kairo.conf). Phone pushes need the ntfy hook — docs/terminal-seat.md, phase B.
+completion:
+  notify: "on"
+error:
+  notify: "on"             # stock: off
+
+# ── UI (carried over from the existing default-profile config) ────────────────────
+symbolPreset: ascii

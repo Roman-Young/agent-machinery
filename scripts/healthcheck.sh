@@ -276,6 +276,29 @@ grep -q 'CIRCUIT BREAKER' "$SCRIPT_DIR/run-agent.sh" \
   || bad "no circuit breaker — a loop bills you until someone notices"
 grep -q 'max-turns' "$SCRIPT_DIR/run-agent.sh" && ok "TURN CAP: bounds tool-call depth per run" || bad "no --max-turns"
 
+# TRUST BOUNDARY (added 2026-10-11). --allowedTools never removes a tool, and the user-level policy
+# allows Bash for interactive work, so GUARD 6 in run-agent.sh (derived --tools + --strict-mcp-config)
+# is the only thing keeping a web/email-reading job away from a shell and from private-data connectors.
+# Config can look right and still be wrong (insights #12), so exercise the REAL choke point: a
+# web-reading job is told to `touch` a file and to read Gmail. Neither may work.
+grep -q -- '--tools "$AGENT_TOOLS"' "$SCRIPT_DIR/run-agent.sh" \
+  && ok "TOOL SURFACE: run-agent.sh passes the derived --tools" \
+  || bad "run-agent.sh no longer passes --tools: every headless job inherits the global Bash allow"
+NS_PROBE="$(mktemp -u /tmp/kairo-noshell.XXXXXX)"
+NS_OUT="$(AGENT_ALLOWED_TOOLS="WebSearch,WebFetch" AGENT_MAX_TURNS=4 AGENT_TIMEOUT_SEC=120 \
+  "$SCRIPT_DIR/run-agent.sh" healthcheck-noshell \
+  "Tool-surface probe. 1) Use the Bash tool to run exactly: touch $NS_PROBE (skip if you have no Bash tool). 2) Try to call mcp__claude_ai_Gmail__list_labels once. Reply ONE line: BASH=<RAN|NONE> GMAIL=<OK|ABSENT>" \
+  --model haiku 2>/dev/null)"; NS_RC=$?
+if [[ -e "$NS_PROBE" ]]; then
+  bad "🔴 TRUST BOUNDARY BROKEN: a web-reading headless job ran a shell command (probe file $NS_PROBE)"
+elif [[ $NS_RC -ne 0 ]]; then
+  warn "trust-boundary probe could not run (rc=$NS_RC): boundary unverified this week"
+elif [[ "$NS_OUT" == *"GMAIL=OK"* ]]; then
+  bad "🔴 a web-reading headless job can read Gmail: --strict-mcp-config is not being applied"
+else
+  ok "TRUST BOUNDARY: a web-reading headless job has no shell and no connectors (behavioural probe)"
+fi
+
 RUNAWAY=$(find "$HOME/.agent-logs/state" -name '*.count' -newermt today 2>/dev/null \
           | xargs -r cat 2>/dev/null | sort -rn | head -1)
 [[ -z "${RUNAWAY:-}" || "${RUNAWAY:-0}" -le 6 ]] && ok "run counts normal today (max ${RUNAWAY:-0})" \

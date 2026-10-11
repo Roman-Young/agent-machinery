@@ -50,19 +50,40 @@ and the accidental (`rm`, `dd`, `git reset --hard`, force-push, reading `.env`/`
 Against a determined adversary it is a speed bump, not a wall. Anyone who tells you
 otherwise is selling something.
 
-**2. The real boundary is the job allowlist — and this is what makes (1) safe.**
+**2. The real boundary is the job's TOOL SURFACE, and this is what makes (1) safe.**
 
 Kairo reads **untrusted input**: email, web pages. Untrusted input plus shell access is the
-whole prompt-injection threat model. The mitigation is that **the jobs which ingest
-untrusted content pass their own explicit `--allowedTools` that exclude Bash entirely.**
+whole prompt-injection threat model. The mitigation: **a job that ingests untrusted content
+does not have a Bash tool at all.**
+
+> ⚠️ **Corrected 2026-10-11.** This section used to say the jobs' `--allowedTools` excluded
+> Bash. It didn't. `--allowedTools` only *pre-approves*; it never removes a tool, and the
+> user-level policy (`Bash` allowed, `acceptEdits`) applies to headless runs too. From
+> 2026-07-14 to 2026-10-11 **every** headless job, email triage included, could run a shell.
+> That was proven by side effect: a probe with `--allowedTools "Read,Glob,Grep"` created a
+> file through Bash. One bus worker did use a shell on 2026-10-11, to unzip a public price list.
+>
+> **The fix is GUARD 6 in `run-agent.sh`:**
+> - It derives `--tools` from each job's allow-list. Built-ins the job doesn't name are gone.
+> - It adds `--strict-mcp-config` when the allow-list names no MCP tool, so a web-reading job
+>   can't read Gmail or Drive and carry it out through WebFetch.
+> - `healthcheck.sh` probes it weekly by behaviour.
 
 ```
-morning-brief.sh  →  Read, Glob, Grep, Gmail(read), Calendar(read)   ← NO BASH. NO SEND.
-nightly-journal.sh → Read, Glob, Grep, Edit, Write, git diff/log     ← no email, no web
+morning-brief.sh   → --tools Read,Glob,Grep      + Gmail/Calendar reads   ← NO BASH. NO SEND.
+email-triage.sh    → --tools Read,Glob,Grep,Edit + Gmail read/label       ← NO BASH. NO SEND. NO WEB.
+bus web worker     → --tools WebSearch,WebFetch  + no connectors          ← NO BASH. NO MAIL.
+nightly-journal.sh → Read, Glob, Grep, Edit, Write, Bash                  ← trusted logs only
 ```
 
-So the path *malicious email → shell command* **does not exist**. Interactive sessions have
-broad Bash, but Roman is sitting there.
+With GUARD 6, the path *malicious email → shell command* **does not exist**, verified by
+probe rather than by reading config.
+
+**Open item:** jobs that list scoped rules like `Bash(git add *)` still get *unscoped* Bash.
+The user-level `Bash` allow wins over the scoping. These jobs (nightly-maintenance,
+nightly-journal, process-outbox) read trusted input only. Closing it fully means running
+headless jobs with `--setting-sources` that skip the user layer; that's a separate decision.
+Interactive sessions have broad Bash, but Roman is sitting there.
 
 > ⚠️ **NEVER add Bash to a job that reads email or fetches web content.** That single change
 > would undo the entire model. If you find yourself wanting to, restructure the job instead.

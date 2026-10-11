@@ -76,6 +76,8 @@ if [[ -z "$MODEL" ]]; then
   esac
 fi
 # Refuse Bash/push/send in a spawned worker — the trust boundary is not optional.
+# (This refusal only keeps Bash out of the ALLOW list. The actual removal happens in run-agent.sh
+#  GUARD 6, which derives --tools from $TOOLS: --allowedTools alone never takes a tool away.)
 if echo "$TOOLS" | grep -qiE 'bash|create_draft|send'; then
   echo "🔴 spawn-agent: refusing — a worker must not have Bash or a send/draft tool."; exit 2
 fi

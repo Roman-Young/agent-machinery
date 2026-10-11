@@ -151,7 +151,12 @@ prompt tells it not to fan out).
 - state lives in the bus, so nothing sits blocked holding RAM.
 
 **Trust boundary — workers have no shell.** `spawn-agent.sh` refuses any `--tools`
-containing Bash or a send/draft tool. Workers Read/Edit/Write (code, absolute paths) or use
+containing Bash or a send/draft tool. *Enforced since 2026-10-11 by `run-agent.sh` GUARD 6.*
+- Before that, the refusal only shaped `--allowedTools`. That flag grants permissions and never
+  removes any, and the user-level `Bash` allow reached every worker. See `permissions.md`.
+- GUARD 6 derives `--tools` from the granted list, so a worker never sees Bash. It also drops
+  every connector for workers granted none, and drops the sub-agent tool, so workers can't
+  spawn workers. Workers Read/Edit/Write (code, absolute paths) or use
 read-only connectors, and cannot push/commit/send. The trusted wrapper is the *only* thing
 that writes to the bus — so content an agent ingested never reaches a shell, and never
 becomes a bus write except through us.

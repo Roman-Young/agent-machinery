@@ -1,0 +1,328 @@
+#!/usr/bin/env python3
+"""kairo-compose — type locally (instant), send the whole message to Kairo's seat on Enter.
+
+Runs on the Mac, in the bottom pane opened by `kairo`. Typing never leaves the Mac until
+Enter; then the finished message goes to the server in ONE ssh call (kairo-send.sh), which
+checks the seat is safe to type into, clears leftovers, and pastes it into the harness.
+
+  Enter            send                 ↑ / ↓        history         Tab   complete /commands
+  line ending in \\ continue on the next line   (end with \\\\ for a literal backslash)
+  :paste           paste a block (code, logs) — tabs kept; finish with a line containing only .
+  :e               write a long message in your editor, send on save
+  :retry           resend the last message that failed
+  :approve :deny   answer an approval prompt in the seat (refused if none is open)
+  :esc             interrupt the agent          :switch   pick a model for THIS chat only
+  :effort          next thinking level          :status   seat / harness / prompt state
+  :up :down :left :right :enter :tab :space :1…:9    keys for menus and pickers
+  /switch <model>  change this chat's model     /model    change the DEFAULT model (saved)
+  ::text           send text starting with ':'  :help     this help     Ctrl-D   restart the box
+  Messages starting with ! (shell) or $ (python) run on the server WITHOUT approval — you'll be asked first.
+"""
+import os
+import readline
+import select
+import shlex
+import subprocess
+import sys
+import tempfile
+import time
+
+os.umask(0o077)                                   # history + temp files: owner-only
+HOME = os.path.expanduser("~")
+CONF = os.path.join(HOME, ".config", "kairo", "server")
+HIST = os.path.join(HOME, ".kairo_compose_history")
+REMOTE_SEND = os.environ.get("KAIRO_REMOTE_SEND", "agent/agent-machinery/scripts/kairo-send.sh")
+LOCAL_SEND = os.environ.get("KAIRO_SEND_CMD")       # test seam: run locally instead of over ssh
+SEND_TIMEOUT = 20
+
+GRN, RED, DIM, RST = "\033[32m", "\033[31m", "\033[2m", "\033[0m"
+KEYS = {"esc": "Escape", "up": "Up", "down": "Down", "left": "Left", "right": "Right",
+        "enter": "Enter", "tab": "Tab", "space": "Space",
+        "switch": "M-p",     # omp Alt+P: model picker for THIS session only (not saved)
+        "effort": "BTab",    # omp Shift+Tab: cycle thinking level
+        **{str(i): str(i) for i in range(1, 10)}}
+ACTIONS = {"approve": "--approve", "y": "--approve", "deny": "--deny", "n": "--deny", "status": "--status"}
+SLASH = sorted({
+    "/switch", "/model", "/compact", "/resume", "/new", "/fork", "/branch", "/tree", "/plan",
+    "/review", "/advisor", "/agents", "/skills", "/hotkeys", "/help", "/settings", "/export",
+    "/dump", "/copy", "/exit", "/memory", "/usage", "/fresh", "/goal",
+    "/todo", "/done", "/task", "/fleet",
+})
+SRV = ""
+last_unsent = None
+
+
+def server():
+    s = os.environ.get("KAIRO_SERVER", "").strip()
+    if not s and os.path.exists(CONF):
+        s = open(CONF).read().strip()
+    return s
+
+
+def ssh_base(master=False):
+    cm = os.path.join(HOME, ".ssh", "kairo-cm-%C")
+    # Sends only REUSE a shared connection (ControlMaster=no + ControlPath): if one exists the
+    # send costs one round trip, if not ssh just connects directly. The shared connection itself
+    # is created separately (ensure_master) — created inside a captured send, the backgrounded
+    # master would hold the output pipe open and the send would hang until the timeout.
+    # Short keepalives: a dead link (sleep, Wi-Fi change) is noticed in ~10 s, not ~90 s.
+    opts = ["-o", "ControlMaster=yes", "-o", "ControlPersist=30m", "-N"] if master else ["-o", "ControlMaster=no"]
+    return ["ssh", "-o", "LogLevel=ERROR", "-o", f"ControlPath={cm}", "-o", "ConnectTimeout=5",
+            "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=2", *opts, "--", SRV]
+
+
+def ensure_master():
+    """Start the shared ssh connection in the background if it isn't alive (never waited on)."""
+    if LOCAL_SEND:
+        return
+    chk = ssh_base()[:-2] + ["-O", "check", "--", SRV]
+    if subprocess.run(chk, stdin=subprocess.DEVNULL, capture_output=True, timeout=5).returncode != 0:
+        subprocess.Popen(ssh_base(master=True), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+def _run(args, data):
+    if LOCAL_SEND:
+        cmd = shlex.split(LOCAL_SEND) + args
+    else:
+        cmd = ssh_base() + [" ".join([REMOTE_SEND] + [shlex.quote(a) for a in args])]
+    # No message → empty stdin, so ssh can't swallow keystrokes from the terminal.
+    kw = {"input": data} if data is not None else {"stdin": subprocess.DEVNULL}
+    return subprocess.run(cmd, text=True, capture_output=True, timeout=SEND_TIMEOUT, **kw)
+
+
+def remote(args, data=None):
+    """Run kairo-send.sh. Returns (ok, message, seconds, delivery_known)."""
+    t0 = time.time()
+    try:
+        r = _run(args, data)
+        if r.returncode == 255 and not LOCAL_SEND:
+            # ssh itself failed (stale shared connection after sleep / network change):
+            # drop the shared connection, try once more directly, and rebuild it in the background.
+            subprocess.run(ssh_base()[:-2] + ["-O", "exit", "--", SRV],
+                           stdin=subprocess.DEVNULL, capture_output=True, timeout=5)
+            r = _run(args, data)
+            try:
+                ensure_master()
+            except Exception:
+                pass
+    except subprocess.TimeoutExpired:
+        return False, f"no answer within {SEND_TIMEOUT}s — delivery unknown; check the top pane before resending", time.time() - t0, False
+    except KeyboardInterrupt:
+        return False, "interrupted — delivery unknown; check the top pane before resending", time.time() - t0, False
+    msg = (r.stderr or r.stdout).strip()
+    if r.returncode == 255 and not msg:
+        msg = "couldn't reach the server (network down?)"
+    return r.returncode == 0, msg, time.time() - t0, True
+
+
+def report(result, what):
+    ok, msg, dt, _ = result
+    if ok:
+        print(f"{DIM}{GRN}✓{RST}{DIM} {what} ({dt:.2f}s){' — ' + msg if msg else ''}{RST}")
+    else:
+        print(f"{RED}✗ not sent:{RST} {msg or 'unknown error'}")
+    return ok
+
+
+def send_message(text):
+    global last_unsent
+    res = remote([], text)
+    if report(res, "sent"):
+        last_unsent = None
+    else:
+        last_unsent = text
+        if res[3]:                                   # definitely not delivered → offer it back
+            print(f"{DIM}  kept it — :retry resends, or ↑ to edit{RST}")
+            prefill(text)
+    return res[0]
+
+
+def prefill(text):
+    if "\n" in text or not hasattr(readline, "set_pre_input_hook"):
+        return
+    def hook():
+        readline.insert_text(text)
+        readline.redisplay()
+        readline.set_pre_input_hook(None)
+    try:
+        readline.set_pre_input_hook(hook)
+    except Exception:
+        pass
+
+
+def complete(text, state):
+    opts = [c for c in SLASH if c.startswith(text)] if text.startswith("/") else []
+    return opts[state] if state < len(opts) else None
+
+
+def zoom():
+    """Toggle the compose pane to full window (for the editor); no-op outside tmux."""
+    if os.environ.get("TMUX"):
+        subprocess.run(["tmux", "resize-pane", "-Z"], capture_output=True)
+
+
+def editor_message():
+    ed = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "nano"
+    fd, path = tempfile.mkstemp(prefix="kairo-", suffix=".md")
+    os.close(fd)
+    zoom()
+    try:
+        subprocess.call(shlex.split(ed) + [path])
+    finally:
+        zoom()
+    return path, open(path).read().strip()
+
+
+def paste_block():
+    """Read raw lines (tabs intact, no completion) until a line with only '.' or Ctrl-D."""
+    print(f"{DIM}paste now — finish with a line containing only . (or Ctrl-D){RST}")
+    lines = []
+    while True:
+        line = sys.stdin.readline()
+        if not line or line.rstrip("\n") == ".":
+            break
+        lines.append(line.rstrip("\n"))
+    return "\n".join(lines)
+
+
+def pending_input(timeout=0.05):
+    try:
+        return bool(select.select([sys.stdin], [], [], timeout)[0])
+    except (ValueError, OSError):
+        return False
+
+
+def read_message(prompt):
+    """One message. Trailing odd backslash continues; lines arriving together (a paste) join."""
+    lines = [input(prompt)]
+    coalesced = False
+    while True:
+        last = lines[-1]
+        n = len(last) - len(last.rstrip("\\"))
+        if n % 2 == 1:                              # odd → continuation
+            lines[-1] = last[:-1]
+            try:
+                lines.append(input("… "))
+            except EOFError:
+                break
+            continue
+        if n:                                       # even (≥2) → the final \\ is one literal \
+            lines[-1] = last[:-1]
+        if pending_input():                         # more lines already waiting → a paste
+            try:
+                lines.append(input(""))
+                coalesced = True
+                continue
+            except EOFError:
+                break
+        break
+    return "\n".join(lines), coalesced
+
+
+def forget_last_history():
+    try:
+        n = readline.get_current_history_length()
+        if n:
+            readline.remove_history_item(n - 1)
+    except Exception:
+        pass
+
+
+def save_history():
+    try:
+        readline.write_history_file(HIST)
+    except OSError:
+        pass
+
+
+def confirm(question):
+    try:
+        return input(f"{question} [y/N] ").strip().lower() in ("y", "yes")
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+
+
+def main():
+    global SRV
+    SRV = server()
+    if not SRV and not LOCAL_SEND:
+        sys.exit("kairo-compose: no server set — run: echo user@host > ~/.config/kairo/server")
+    os.makedirs(os.path.join(HOME, ".ssh"), mode=0o700, exist_ok=True)
+    try:
+        readline.read_history_file(HIST)
+    except (FileNotFoundError, OSError):
+        pass
+    readline.set_history_length(1000)
+    readline.set_completer(complete)
+    readline.set_completer_delims(" \t\n")
+    readline.parse_and_bind("bind ^I rl_complete" if "libedit" in (readline.__doc__ or "") else "tab: complete")
+    try:
+        ensure_master()  # open the shared ssh connection now so sends are one round trip
+    except Exception:
+        pass             # sends still work over direct connections
+
+    interactive = sys.stdin.isatty()
+    if interactive:
+        print(f"{DIM}kairo-compose → {SRV or 'local test'} · Enter sends · :help · Ctrl-D restarts{RST}")
+    prompt = "› " if interactive else ""            # plain: colour codes garble long lines
+    while True:
+        try:
+            text, coalesced = read_message(prompt)
+        except KeyboardInterrupt:
+            print()
+            continue
+        except EOFError:
+            print()
+            break
+        stripped = text.strip()
+        if not stripped:
+            continue
+        if stripped.startswith(":") and not stripped.startswith("::") and not coalesced:
+            forget_last_history()                   # keep ":down" etc. out of ↑ history
+            cmd = stripped[1:].strip().lower()
+            if cmd in ("q", "quit", "exit"):
+                break
+            if cmd == "help":
+                print(__doc__[__doc__.index("  Enter"):].rstrip())
+            elif cmd == "retry":
+                if last_unsent:
+                    send_message(last_unsent)
+                else:
+                    print(f"{DIM}(nothing to retry){RST}")
+            elif cmd == "paste":
+                block = paste_block()
+                if block.strip():
+                    send_message(block)
+            elif cmd == "e":
+                path, body = editor_message()
+                if body and send_message(body):
+                    os.unlink(path)
+                elif body:
+                    print(f"{DIM}  draft kept at {path}{RST}")
+                else:
+                    os.unlink(path)
+                    print(f"{DIM}(empty — nothing sent){RST}")
+            elif cmd in ACTIONS:
+                report(remote([ACTIONS[cmd]]), cmd)
+            elif cmd in KEYS:
+                report(remote(["--key", KEYS[cmd]]), f"key {KEYS[cmd]}")
+            else:
+                print(f"{RED}unknown command ':{cmd}'{RST} — ':help' lists them")
+            continue
+        if stripped.startswith("::"):
+            text = text.replace("::", ":", 1)
+        # omp runs these immediately, with no tool approval — make sure that's intended.
+        if stripped.startswith("!") or (stripped.startswith("$") and stripped[1:2] in (" ", "\t", "\n", "$")):
+            kind = "a shell command" if stripped.startswith("!") else "python code"
+            if not confirm(f"This runs {kind} on the server right away, with no approval. Send?"):
+                print(f"{DIM}(not sent){RST}")
+                continue
+        send_message(text)
+        save_history()                               # after every send: survives a closed window
+    save_history()
+
+
+if __name__ == "__main__":
+    main()
