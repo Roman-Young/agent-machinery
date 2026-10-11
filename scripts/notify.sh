@@ -3,6 +3,8 @@
 #
 # Usage: notify.sh <urgent|alert|fyi> <title> <message>
 #        notify.sh <title> <message>            (old 2-arg form — defaults to "alert")
+#        NOTIFY_ATTACH=/path/preview.png notify.sh fyi <title> <message>   (attach a file; an
+#                                                image shows inline on the phone)
 #
 # ══════════════════════════════════════════════════════════════════════════════
 # WHY TWO TOPICS, NOT ONE
@@ -54,6 +56,28 @@ TOPIC="$NTFY_TOPIC"
 # Delay header so a 3am cron job can speak at a human hour. Unset = deliver now.
 DELAY_ARGS=()
 [[ -n "${NOTIFY_DELAY:-}" ]] && DELAY_ARGS=(-H "Delay: $NOTIFY_DELAY")
+
+# Optional attachment: NOTIFY_ATTACH=/path/file (e.g. a rendered preview, so Roman can see visual
+# work from his phone when he's away from the desk). The file becomes the request body, so the
+# text moves into headers, which can't carry newlines. ntfy.sh keeps attachments 3 h, 15 MB max.
+if [[ -n "${NOTIFY_ATTACH:-}" ]]; then
+  if [[ ! -f "$NOTIFY_ATTACH" ]]; then
+    echo "ERROR: NOTIFY_ATTACH file not found: $NOTIFY_ATTACH" >&2
+    exit 1
+  fi
+  if curl -fsS -T "$NOTIFY_ATTACH" \
+        -H "Title: $TITLE" \
+        -H "Message: $(printf '%s' "$MESSAGE" | tr '\n' ' ')" \
+        -H "Filename: $(basename "$NOTIFY_ATTACH")" \
+        "${DELAY_ARGS[@]}" \
+        "$NTFY_URL/$TOPIC" >/dev/null; then
+    echo "notified ($TIER, with $(basename "$NOTIFY_ATTACH")): $TITLE"
+    exit 0
+  else
+    echo "ERROR: ntfy push with attachment FAILED (curl non-zero). File too big, or topic/URL wrong?" >&2
+    exit 1
+  fi
+fi
 
 # --fail so a non-2xx is an error, not a silent success.
 if curl -fsS \
