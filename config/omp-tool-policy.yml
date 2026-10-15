@@ -1,0 +1,37 @@
+# omp per-connector approval policy → rendered into omp's `tools.approval` by
+# scripts/omp-tool-policy.py (never hand-edit the rendered entries; edit this file and re-run).
+#
+# Why a generator: omp approval rules take EXACT tool names (no wildcards), and a user rule
+# beats every approval mode — including yolo/"Full Access" and sub-agents. So these rules,
+# not the chat's mode, are what actually enforce draft-only email and no sharing/deleting.
+#
+# match = fnmatch glob over "<server>:<tool>" (the raw MCP names). First match wins.
+# House rule: read → allow · create/edit → prompt · send/share/delete → deny.
+# Unmatched tools fall back on the server's own hint: readOnlyHint → allow, otherwise prompt.
+
+rules:
+  # --- Google Workspace (server "workspace"): draft-only email, no sharing ---
+  - {match: "workspace:send_*", approval: deny}
+  - {match: "workspace:*forward*", approval: deny}
+  - {match: "workspace:manage_drive_access", approval: deny}
+  - {match: "workspace:set_drive_file_permissions", approval: deny}
+  - {match: "workspace:start_google_auth", approval: allow}
+  - {match: "workspace:get_gmail_attachment_content", approval: allow}
+
+  # --- read-only research / notes services ---
+  - {match: "pubmed:*", approval: allow}
+  - {match: "biorxiv:*", approval: allow}
+  - {match: "ctrials:*", approval: allow}
+  - {match: "chembl:*", approval: allow}
+  - {match: "opentargets:*", approval: allow}
+  - {match: "consensus:*", approval: allow}
+  - {match: "granola:*", approval: allow}
+  - {match: "wisprflow:*task*", approval: prompt}
+  - {match: "wisprflow:*", approval: allow}
+
+  # --- spends credits ---
+  - {match: "openart:*generat*", approval: prompt}
+
+# Denied even before a server's tool list has been seen (defense in depth).
+always_deny:
+  - "workspace:send_gmail_message"
